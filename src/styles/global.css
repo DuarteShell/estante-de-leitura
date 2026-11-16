@@ -333,7 +333,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--moss); }
 .check input { width: 18px; height: 18px; margin: 0; }
 .steam { animation: steam 2.6s ease-in-out infinite alternate; }
 @keyframes steam { from { opacity: 0.35; transform: translateY(2px); } to { opacity: 0.9; transform: translateY(-2px); } }
-.flame { transform-origin: 20px 24px; animation: flame 1.4s ease-in-out infinite alternate; }
+.flame { transform-origin: 24px 38px; animation: flame 1.4s ease-in-out infinite alternate; }
 @keyframes flame { from { transform: scale(0.94) rotate(-3deg); } to { transform: scale(1.04) rotate(3deg); } }
 
 /* organizar a estante (arrastar) */

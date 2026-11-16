@@ -153,16 +153,34 @@ export function ShelfMug() {
   );
 }
 
+/** vela aromática num pote de vidro, acesa */
 export function ShelfCandle() {
   return (
-    <svg width="40" height="78" viewBox="0 0 40 78" aria-hidden="true" className="shelf-deco">
-      <path d="M20 8 c5 7, 5 12, 0 16 c-5 -4, -5 -9, 0 -16 z" fill="#E2B04A" className="flame" />
-      <path d="M20 14 c2 4, 2 6, 0 8 c-2 -2, -2 -4, 0 -8 z" fill="#FBF8EF" />
-      <path d="M20 24 v5" stroke="#4A3221" strokeWidth="1.5" />
-      <rect x="11" y="29" width="18" height="40" rx="3" fill="#F6E9C9" />
-      <path d="M13 29 v8 a2 2 0 0 0 4 0 v-4" fill="#EADBB5" />
-      <ellipse cx="20" cy="71" rx="17" ry="4" fill="#9C6B43" />
-      <rect x="3" y="69" width="34" height="6" rx="3" fill="#7A5235" />
+    <svg width="52" height="80" viewBox="0 0 52 80" aria-hidden="true" className="shelf-deco">
+      {/* fumacinha perfumada */}
+      <path d="M24 19 c-4 -3, 4 -6, 0 -9 c-3 -3, 3 -5, 1 -9" stroke="#D9B8AE" strokeWidth="2.2" strokeLinecap="round" fill="none" opacity="0.75" className="steam" />
+      {/* chama */}
+      <g className="flame">
+        <path d="M24 22 c5 6, 5 12, 0 16 c-5 -4, -5 -10, 0 -16 z" fill="#E2B04A" />
+        <path d="M24 29 c2 3, 2 6, 0 8 c-2 -2, -2 -5, 0 -8 z" fill="#F7E3B0" />
+      </g>
+      <path d="M24 37 v6" stroke="#4A3221" strokeWidth="1.4" strokeLinecap="round" />
+      {/* pote de vidro com cera */}
+      <path d="M8 42 h32 v30 a6 6 0 0 1 -6 6 h-20 a6 6 0 0 1 -6 -6 z" fill="#C46A4A" />
+      <ellipse cx="24" cy="44" rx="16" ry="2.4" fill="#D98A6C" />
+      <path d="M6 38 h36 v34 a8 8 0 0 1 -8 8 h-20 a8 8 0 0 1 -8 -8 z" fill="#FBF8EF" fillOpacity="0.18" stroke="#5C3D26" strokeWidth="1.4" />
+      <path d="M6 38 h36" stroke="#5C3D26" strokeWidth="1.4" />
+      <path d="M11 46 v20" stroke="#FBF8EF" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
+      {/* rótulo e pontinhos de brilho */}
+      <rect x="15" y="56" width="18" height="10" rx="2" fill="#F6E9C9" />
+      <path d="M18 61 h12" stroke="#9C6B43" strokeWidth="1" />
+      <circle cx="35" cy="50" r="0.9" fill="#FBF8EF" />
+      <circle cx="31" cy="71" r="0.9" fill="#FBF8EF" />
+      <circle cx="16" cy="72" r="0.9" fill="#FBF8EF" />
+      {/* tampa de madeira encostada */}
+      <ellipse cx="46" cy="66" rx="4" ry="13" fill="#B88A5E" stroke="#5C3D26" strokeWidth="1.2" transform="rotate(12 46 66)" />
+      <circle cx="45.5" cy="60" r="0.8" fill="#7A5235" />
+      <circle cx="46.5" cy="68" r="0.8" fill="#7A5235" />
     </svg>
   );
 }
@@ -174,5 +192,5 @@ export const SHELF_DECOR = [
   { el: ShelfCactus, w: 54 },
   { el: ShelfFrame, w: 68 },
   { el: ShelfMug, w: 64 },
-  { el: ShelfCandle, w: 50 }
+  { el: ShelfCandle, w: 62 }
 ];

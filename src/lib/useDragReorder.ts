@@ -136,3 +136,20 @@ export function moveId(ids: string[], dragId: string, target: DropTarget): strin
   rest.splice(target.after ? i + 1 : i, 0, dragId);
   return rest;
 }
+
+/**
+ * Move um bloco de ids (ex.: uma saga inteira) para antes/depois do bloco do alvo.
+ * `blockOf` devolve o bloco a que um id pertence (ele mesmo, se for livro único).
+ */
+export function moveBlock(ids: string[], dragId: string, target: DropTarget, blockOf: (id: string) => string[]): string[] {
+  const block = new Set(blockOf(dragId));
+  if (block.has(target.id)) return ids;
+  const targetBlock = blockOf(target.id);
+  const anchor = target.after ? targetBlock[targetBlock.length - 1] : targetBlock[0];
+  const rest = ids.filter((x) => !block.has(x));
+  const i = rest.indexOf(anchor);
+  if (i < 0) return ids;
+  const moving = ids.filter((x) => block.has(x));
+  rest.splice(target.after ? i + 1 : i, 0, ...moving);
+  return rest;
+}

@@ -7,8 +7,8 @@ import { ChipGroup, Cover, Empty } from '../components/ui';
 import { legacyBooks } from '../lib/stats';
 import type { Book, BookStatus } from '../lib/types';
 import { STATUS_DOT } from '../lib/types';
-import { moveId, useDragReorder, type DropTarget } from '../lib/useDragReorder';
-import { norm, seriesTag } from '../lib/util';
+import { moveBlock, useDragReorder, type DropTarget } from '../lib/useDragReorder';
+import { groupSeries, norm, seriesKey, seriesTag } from '../lib/util';
 import { useLibrary } from '../store/library';
 
 type Filter = 'todos' | BookStatus;
@@ -130,14 +130,27 @@ export default function ShelfPage() {
         return !x ? (y ? 1 : byTitle(a, b)) : !y ? -1 : y.localeCompare(x) || byTitle(a, b);
       });
     else out.sort((a, b) => b.created_at.localeCompare(a.created_at));
-    return out;
+    // livros da mesma saga sempre juntos e em ordem (1, 2, 3…)
+    return groupSeries(out);
   }, [books, filter, onlyLegacy, onlyOwned, q, sort, legacyIds, lastRead]);
 
   /** solta o livro arrastado: recalcula a ordem de TODA a estante (mesmo com filtro ativo) */
   const onReorder = (dragId: string, target: DropTarget) => {
-    const all = [...books].sort(manualOrder).map((b) => b.id);
-    const next = moveId(all, dragId, target);
-    if (next.join() !== all.join()) reorderBooks(next);
+    const all = groupSeries([...books].sort(manualOrder));
+    const ids = all.map((b) => b.id);
+    // arrastar um livro de saga leva a saga inteira (ela fica sempre junta)
+    const blockOf = (id: string) => {
+      const k = seriesKey(all.find((b) => b.id === id) ?? { series: null });
+      return k ? all.filter((b) => seriesKey(b) === k).map((b) => b.id) : [id];
+    };
+    const next = moveBlock(ids, dragId, target, blockOf);
+    if (next.join() !== ids.join()) reorderBooks(next);
+  };
+  /** o livro faz parte do que está sendo arrastado (ele mesmo ou a saga dele) */
+  const isDragging = (b: Book, dragId: string) => {
+    if (b.id === dragId) return true;
+    const k = seriesKey(b);
+    return !!k && k === seriesKey(books.find((x) => x.id === dragId) ?? { series: null });
   };
   const coverDrag = useDragReorder(arranging && view === 'capas', onReorder);
 
@@ -266,7 +279,7 @@ export default function ShelfPage() {
               key={b.id}
               to={`${base}/livro/${b.id}`}
               draggable={false}
-              className={`${coverDrag.dragId === b.id ? 'drag-src' : ''} ${coverDrag.over?.id === b.id ? (coverDrag.over.after ? 'drop-after' : 'drop-before') : ''}`}
+              className={`${coverDrag.dragId && isDragging(b, coverDrag.dragId) ? 'drag-src' : ''} ${coverDrag.over?.id === b.id ? (coverDrag.over.after ? 'drop-after' : 'drop-before') : ''}`}
               {...coverDrag.itemProps(b.id)}
             >
               <Cover book={b} width={104} className="cover-fluid" />

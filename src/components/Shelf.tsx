@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Book } from '../lib/types';
 import { STATUS_DOT, STATUS_LABEL } from '../lib/types';
 import { useDragReorder, type DropTarget } from '../lib/useDragReorder';
-import { bookColors, hash } from '../lib/util';
+import { bookColors, hash, seriesKey } from '../lib/util';
 import { useLibrary } from '../store/library';
 import { SHELF_DECOR } from './Decor';
 
@@ -38,6 +38,9 @@ export function Shelf({
 }) {
   const { base } = useLibrary();
   const drag = useDragReorder(reorder, (id, t) => onReorder?.(id, t));
+  // a saga inteira acompanha o livro arrastado
+  const dragKey = drag.dragId ? seriesKey(books.find((b) => b.id === drag.dragId) ?? { series: null }) : null;
+  const isDragged = (b: Book) => b.id === drag.dragId || (!!dragKey && seriesKey(b) === dragKey);
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(330);
 
@@ -83,7 +86,7 @@ export function Shelf({
                 <Link
                   key={book.id}
                   to={`${base}/livro/${book.id}`}
-                  className={`spine ${wish ? 'wish' : ''} ${drag.dragId === book.id ? 'drag-src' : ''} ${mark}`}
+                  className={`spine ${wish ? 'wish' : ''} ${isDragged(book) ? 'drag-src' : ''} ${mark}`}
                   style={{ width: w, height: h, background: bg }}
                   aria-label={`${book.title} — ${STATUS_LABEL[book.status]}${book.series ? ` — ${book.series}${book.series_index != null ? ` #${book.series_index}` : ''}` : ''}`}
                   title={book.series ? `${book.title} (${book.series}${book.series_index != null ? ` #${String(book.series_index).replace('.', ',')}` : ''})` : book.title}

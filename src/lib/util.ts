@@ -113,3 +113,31 @@ export function seriesTag(book: Book, books: Book[]): string | null {
   const total = seriesTotal(book, books);
   return `#${fmtIndex(book.series_index)}${total ? `/${total}` : ''}`;
 }
+
+/** chave da saga (ignora maiúsculas/acentos) ou null */
+export const seriesKey = (b: Pick<Book, 'series'>) => (b.series ? norm(b.series) : null);
+
+/**
+ * Junta os livros de cada saga, em ordem crescente (1, 2, 3…), no lugar
+ * em que o primeiro livro da saga apareceria na lista.
+ */
+export function groupSeries(list: Book[]): Book[] {
+  const groups = new Map<string, Book[]>();
+  for (const b of list) {
+    const k = seriesKey(b);
+    if (k) groups.set(k, [...(groups.get(k) ?? []), b]);
+  }
+  for (const g of groups.values())
+    g.sort((a, b) => (a.series_index ?? 999) - (b.series_index ?? 999) || a.title.localeCompare(b.title, 'pt-BR'));
+  const out: Book[] = [];
+  const done = new Set<string>();
+  for (const b of list) {
+    const k = seriesKey(b);
+    if (!k) out.push(b);
+    else if (!done.has(k)) {
+      done.add(k);
+      out.push(...groups.get(k)!);
+    }
+  }
+  return out;
+}
