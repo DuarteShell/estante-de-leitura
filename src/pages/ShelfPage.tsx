@@ -5,12 +5,20 @@ import { Icon } from '../components/Icon';
 import { Shelf } from '../components/Shelf';
 import { ChipGroup, Cover, Empty } from '../components/ui';
 import { legacyBooks } from '../lib/stats';
-import type { BookStatus } from '../lib/types';
+import type { Book, BookStatus } from '../lib/types';
 import { STATUS_DOT } from '../lib/types';
 import { norm } from '../lib/util';
 import { useLibrary } from '../store/library';
 
 type Filter = 'todos' | BookStatus;
+type Sort = 'recentes' | 'titulo' | 'autor' | 'genero' | 'leitura';
+const SORTS: { value: Sort; label: string }[] = [
+  { value: 'recentes', label: 'Adicionados recentemente' },
+  { value: 'titulo', label: 'Título' },
+  { value: 'autor', label: 'Autor' },
+  { value: 'genero', label: 'Gênero' },
+  { value: 'leitura', label: 'Data de leitura' }
+];
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'todos', label: 'Todos' },
   { value: 'lido', label: 'Lidos' },
@@ -28,7 +36,33 @@ export default function ShelfPage() {
   const [q, setQ] = useState('');
   const [view, setView] = useState<'estante' | 'capas'>(() => (localStorage.getItem('estante:view') as 'estante' | 'capas') || 'estante');
   const [onlyOwned, setOnlyOwned] = useState(false);
-  const [sort, setSort] = useState<'recentes' | 'titulo' | 'autor'>('recentes');
+  const [sort, setSortState] = useState<Sort>(() => {
+    try {
+      const v = localStorage.getItem('estante:sort') as Sort | null;
+      return v && SORTS.some((o) => o.value === v) ? v : 'recentes';
+    } catch {
+      return 'recentes';
+    }
+  });
+  const setSort = (v: Sort) => {
+    setSortState(v);
+    try {
+      localStorage.setItem('estante:sort', v);
+    } catch {
+      /* ok */
+    }
+  };
+
+  /** data da leitura concluída mais recente de cada livro */
+  const lastRead = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of readings) {
+      if (r.status !== 'lido') continue;
+      const d = r.finished_at ?? (r.year ? `${r.year}-00-00` : null);
+      if (d && d > (m.get(r.book_id) ?? '')) m.set(r.book_id, d);
+    }
+    return m;
+  }, [readings]);
 
   const legacyIds = useMemo(() => new Set(legacyBooks(books, readings).map((b) => b.id)), [books, readings]);
   const counts = useMemo(() => {
@@ -46,11 +80,21 @@ export default function ShelfPage() {
         (!onlyOwned || b.owned) &&
         (!nq || norm(b.title).includes(nq) || norm(b.author).includes(nq) || b.genres.some((g) => norm(g).includes(nq)))
     );
-    if (sort === 'titulo') out.sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
-    else if (sort === 'autor') out.sort((a, b) => (a.author ?? '').localeCompare(b.author ?? '', 'pt-BR') || a.title.localeCompare(b.title, 'pt-BR'));
+    const byTitle = (a: Book, b: Book) => a.title.localeCompare(b.title, 'pt-BR');
+    // vazios (sem autor/gênero/data) vão para o fim
+    const text = (x: string | null | undefined, y: string | null | undefined) => (!x ? (y ? 1 : 0) : !y ? -1 : x.localeCompare(y, 'pt-BR'));
+    if (sort === 'titulo') out.sort(byTitle);
+    else if (sort === 'autor') out.sort((a, b) => text(a.author, b.author) || byTitle(a, b));
+    else if (sort === 'genero') out.sort((a, b) => text(a.genres[0], b.genres[0]) || text(a.author, b.author) || byTitle(a, b));
+    else if (sort === 'leitura')
+      out.sort((a, b) => {
+        const x = lastRead.get(a.id);
+        const y = lastRead.get(b.id);
+        return !x ? (y ? 1 : byTitle(a, b)) : !y ? -1 : y.localeCompare(x) || byTitle(a, b);
+      });
     else out.sort((a, b) => b.created_at.localeCompare(a.created_at));
     return out;
-  }, [books, filter, onlyLegacy, onlyOwned, q, sort, legacyIds]);
+  }, [books, filter, onlyLegacy, onlyOwned, q, sort, legacyIds, lastRead]);
 
   const setFilter = (f: Filter) => {
     const p = new URLSearchParams();
@@ -114,16 +158,16 @@ export default function ShelfPage() {
             Só lidos sem registro ✕
           </button>
         )}
-        {view === 'capas' && (
-          <label className="row" style={{ gap: 6 }}>
-            <span className="muted">Ordenar</span>
-            <select className="select" style={{ width: 'auto', minHeight: 36, padding: '4px 10px' }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-              <option value="recentes">Recentes</option>
-              <option value="titulo">Título</option>
-              <option value="autor">Autor</option>
-            </select>
-          </label>
-        )}
+        <label className="row" style={{ gap: 6 }}>
+          <span className="muted">Organizar por</span>
+          <select className="select" style={{ width: 'auto', minHeight: 36, padding: '4px 10px' }} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+            {SORTS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {list.length === 0 ? (

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
 import { Icon, type IconName } from '../components/Icon';
 import { Cover, Empty } from '../components/ui';
-import { availableYears, legacyBooks, yearStats } from '../lib/stats';
+import { availableYears, legacyBooks, shelfProgress, yearStats } from '../lib/stats';
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
 import { useLibrary } from '../store/library';
@@ -41,6 +41,7 @@ export default function Home() {
     read: books.filter((b) => b.status === 'lido').length,
     wish: books.filter((b) => b.status === 'desejo').length
   };
+  const shelfPct = useMemo(() => shelfProgress(books), [books]);
   const goal = profile?.annual_goal ?? null;
   const maxMonth = Math.max(1, ...s.months);
   const genreTotal = s.genres.reduce((a, g) => a + g.n, 0);
@@ -118,10 +119,30 @@ export default function Home() {
 
           <div className="grid-stats">
             <StatCard icon="book" value={String(s.books)} label="livros lidos" bg="#E3E8D5" fg="#4F6B47" />
-            <StatCard icon="pages" value={fmtNum(s.pages)} label="páginas" bg="#F1E4D3" fg="#7A5235" />
+            <StatCard icon="pages" value={fmtNum(s.pages)} label={s.audiobooks ? `páginas (sem ${s.audiobooks} audiobook${s.audiobooks > 1 ? 's' : ''})` : 'páginas'} bg="#F1E4D3" fg="#7A5235" />
             <StatCard icon="leaf" value={s.avgRating == null ? '—' : fmtRating(Math.round(s.avgRating * 10) / 10)} label="nota média" bg="#F6E9C9" fg="#8A5F1A" />
             <StatCard icon="readings" value={String(reading.length)} label="lendo agora" bg="#E3E8D5" fg="#4F6B47" />
           </div>
+
+          {shelfPct.total > 0 && (
+            <div className="card stack" style={{ gap: 10 }}>
+              <div className="row between">
+                <span className="eyebrow">Estante lida</span>
+                <span className="small" style={{ fontWeight: 800, color: 'var(--moss)' }}>{shelfPct.pct}%</span>
+              </div>
+              <div className="serif" style={{ fontSize: 24, fontWeight: 600 }}>
+                {shelfPct.read} <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink-2)' }}>de {shelfPct.total} livros que você tem</span>
+              </div>
+              <div className="progress" style={{ height: 14 }}>
+                <div style={{ width: `${shelfPct.pct}%`, background: 'var(--leaf)' }} />
+              </div>
+              <span className="small muted">
+                {shelfPct.unread === 0
+                  ? 'Nenhum livro esperando na estante. Pode comprar sem culpa! 🌱'
+                  : `${shelfPct.unread} ${shelfPct.unread === 1 ? 'livro esperando' : 'livros esperando'} para ser lido${shelfPct.unread === 1 ? '' : 's'}${shelfPct.pct < 50 ? ' — talvez segurar as compras um pouquinho 😉' : ''}`}
+              </span>
+            </div>
+          )}
 
           <p className="small muted" style={{ margin: 0 }}>
             Na estante: <b>{totals.shelf}</b> · Lidos no total: <b>{totals.read}</b>

@@ -6,6 +6,8 @@ export interface YearStats {
   finished: Reading[];
   books: number;
   pages: number;
+  /** livros ouvidos em audiobook (não entram na soma de páginas) */
+  audiobooks: number;
   avgRating: number | null;
   months: number[];
   genres: { name: string; n: number }[];
@@ -32,7 +34,8 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
 
   for (const r of finished) {
     const b = byId.get(r.book_id);
-    pages += r.pages_read ?? b?.pages ?? 0;
+    // audiobook não conta páginas
+    if (r.format !== 'audiobook') pages += r.pages_read ?? b?.pages ?? 0;
     if (r.finished_at) months[Number(r.finished_at.slice(5, 7)) - 1] += 1;
     if (r.rating != null) {
       ratingSum += r.rating;
@@ -43,7 +46,7 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
     if (b) {
       b.genres.forEach((g) => genres.set(g, (genres.get(g) ?? 0) + 1));
       if (b.author) authors.set(b.author, (authors.get(b.author) ?? 0) + 1);
-      if (b.pages && (!longest || b.pages > (longest.pages ?? 0))) longest = b;
+      if (r.format !== 'audiobook' && b.pages && (!longest || b.pages > (longest.pages ?? 0))) longest = b;
     }
   }
 
@@ -55,6 +58,7 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
     finished,
     books: finished.length,
     pages,
+    audiobooks: formats.audiobook,
     avgRating: rated ? ratingSum / rated : null,
     months,
     genres: sortMap(genres),
@@ -79,4 +83,12 @@ export function availableYears(readings: Reading[]): number[] {
 export function legacyBooks(books: Book[], readings: Reading[]) {
   const withReading = new Set(readings.filter((r) => r.status === 'lido').map((r) => r.book_id));
   return books.filter((b) => b.status === 'lido' && !withReading.has(b.id));
+}
+
+/** Quanto da estante (livros que tenho, fora desejos) já foi lido. */
+export function shelfProgress(books: Book[]) {
+  const shelf = books.filter((b) => b.owned && b.status !== 'desejo');
+  const read = shelf.filter((b) => b.status === 'lido').length;
+  const unread = shelf.filter((b) => b.status === 'nao_lido').length;
+  return { total: shelf.length, read, unread, pct: shelf.length ? Math.round((read / shelf.length) * 100) : 0 };
 }

@@ -29,11 +29,29 @@ export function HangingPlant({ className, style }: { className?: string; style?:
 export function PottedPlant({ size = 54, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size * 1.2} viewBox="0 0 54 64" aria-hidden="true" className={className}>
-      <ellipse cx="18" cy="20" rx="13" ry="6" fill="#8FA876" transform="rotate(-50 18 20)" />
-      <ellipse cx="36" cy="18" rx="13" ry="6" fill="#6E8B5E" transform="rotate(45 36 18)" />
-      <ellipse cx="27" cy="14" rx="6" ry="14" fill="#A3B18A" />
-      <path d="M12 34 h30 l-4 26 h-22 z" fill="#B88A5E" />
-      <rect x="10" y="31" width="34" height="7" rx="3" fill="#7A5235" />
+      {/* folhas pontudas saindo da terra, cada uma com caule e nervura */}
+      {(
+        [
+          [-62, 17, '#6E8B5E'],
+          [62, 16, '#6E8B5E'],
+          [-30, 24, '#8FA876'],
+          [32, 23, '#8FA876'],
+          [-4, 30, '#A3B18A']
+        ] as [number, number, string][]
+      ).map(([angle, len, color], i) => (
+        <g key={i} transform={`translate(27 34) rotate(${angle})`}>
+          <path d={`M0 0 V${-len * 0.25}`} stroke="#5E7A4F" strokeWidth="1.4" strokeLinecap="round" />
+          <path
+            d={`M0 ${-len * 0.22} C ${len * 0.3} ${-len * 0.4}, ${len * 0.28} ${-len * 0.8}, 0 ${-len} C ${-len * 0.28} ${-len * 0.8}, ${-len * 0.3} ${-len * 0.4}, 0 ${-len * 0.22} Z`}
+            fill={color}
+          />
+          <path d={`M0 ${-len * 0.26} V${-len * 0.88}`} stroke="#FBF8EF" strokeOpacity="0.45" strokeWidth="0.9" strokeLinecap="round" />
+        </g>
+      ))}
+      <path d="M12 36 h30 l-4 24 a3 3 0 0 1 -3 2.5 h-16 a3 3 0 0 1 -3 -2.5 z" fill="#B88A5E" />
+      <path d="M13.5 43 h27" stroke="#A47650" strokeWidth="1" />
+      <rect x="10" y="32" width="34" height="6" rx="3" fill="#7A5235" />
+      <ellipse cx="27" cy="32.5" rx="14" ry="1.6" fill="#4A3221" />
     </svg>
   );
 }
