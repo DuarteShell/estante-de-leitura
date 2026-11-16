@@ -277,7 +277,7 @@ h3 { font-size: 17px; }
 
 .scanner { position: relative; border-radius: 26px; overflow: hidden; background: var(--ink); aspect-ratio: 4 / 3; max-height: 340px; width: 100%; }
 .scanner video { width: 100%; height: 100%; object-fit: cover; }
-.scanner .frame { position: absolute; inset: 22% 14%; border: 3px solid rgba(163, 177, 138, 0.9); border-radius: 16px; box-shadow: 0 0 0 999px rgba(47, 62, 44, 0.35); }
+.scanner .frame { position: absolute; inset: 22% 14%; border: 3px solid rgba(163, 177, 138, 0.9); border-radius: 16px; box-shadow: 0 0 0 999px rgba(47, 62, 44, 0.18); }
 .scanner .laser { position: absolute; left: 16%; right: 16%; top: 50%; height: 3px; background: #e2b04a; box-shadow: 0 0 12px #e2b04a; animation: scan 1.8s ease-in-out infinite alternate; }
 @keyframes scan { from { top: 30%; } to { top: 70%; } }
 
