@@ -119,7 +119,7 @@ export default function Home() {
 
           <div className="grid-stats">
             <StatCard icon="book" value={String(s.books)} label="livros lidos" bg="#E3E8D5" fg="#4F6B47" />
-            <StatCard icon="pages" value={fmtNum(s.pages)} label={s.audiobooks ? `páginas (sem ${s.audiobooks} audiobook${s.audiobooks > 1 ? 's' : ''})` : 'páginas'} bg="#F1E4D3" fg="#7A5235" />
+            <StatCard icon="pages" value={fmtNum(s.pages)} label="páginas" bg="#F1E4D3" fg="#7A5235" />
             <StatCard icon="leaf" value={s.avgRating == null ? '—' : fmtRating(Math.round(s.avgRating * 10) / 10)} label="nota média" bg="#F6E9C9" fg="#8A5F1A" />
             <StatCard icon="readings" value={String(reading.length)} label="lendo agora" bg="#E3E8D5" fg="#4F6B47" />
           </div>
