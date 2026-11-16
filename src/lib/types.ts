@@ -25,6 +25,12 @@ export interface Book {
   owned: boolean;
   current_page: number | null;
   notes: string | null;
+  /** saga/série: nome, posição (pode ser 1.5) e total de livros */
+  series?: string | null;
+  series_index?: number | null;
+  series_total?: number | null;
+  /** ordem manual na estante (menor = primeiro) */
+  shelf_position?: number | null;
   created_at: string;
   updated_at?: string;
 }

@@ -26,6 +26,8 @@ export interface Backend {
   insertBooks(rows: Book[]): Promise<void>;
   updateBook(id: string, patch: Partial<Book>): Promise<void>;
   deleteBook(id: string): Promise<void>;
+  /** grava a ordem manual: ids na ordem desejada */
+  reorderBooks(ids: string[]): Promise<void>;
   insertReadings(rows: Reading[]): Promise<void>;
   updateReading(id: string, patch: Partial<Reading>): Promise<void>;
   deleteReading(id: string): Promise<void>;
@@ -46,6 +48,8 @@ const strip = <T extends object>(row: T): T => {
 };
 
 function friendly(msg: string) {
+  if (/(series|shelf_position).*(column|schema cache)|column.*(series|shelf_position)/i.test(msg))
+    return 'Falta atualizar o banco: rode o supabase/schema.sql de novo no Supabase';
   if (/invalid login credentials/i.test(msg)) return '@usuário ou PIN incorretos';
   if (/already registered|already exists/i.test(msg)) return 'Esse @ já está em uso';
   if (/rate limit|too many/i.test(msg)) return 'Muitas tentativas. Espere alguns minutos e tente de novo';
@@ -124,7 +128,7 @@ class SupabaseBackend implements Backend {
     ]);
     return {
       profile,
-      books: this.check(b) as Book[],
+      books: (this.check(b) as Book[]).map((x) => ({ ...x, series_index: x.series_index == null ? null : Number(x.series_index) })),
       readings: (this.check(r) as Reading[]).map((x) => ({ ...x, rating: x.rating == null ? null : Number(x.rating) })),
       quotes: this.check(q) as Quote[]
     };
@@ -158,6 +162,14 @@ class SupabaseBackend implements Backend {
   }
   async deleteBook(id: string) {
     this.check(await this.sb.from('books').delete().eq('id', id));
+  }
+  async reorderBooks(ids: string[]) {
+    const { error } = await this.sb.rpc('reorder_books', { ids });
+    if (error) {
+      if (/reorder_books|function|schema cache/i.test(error.message))
+        throw new Error('Falta atualizar o banco: rode o supabase/schema.sql de novo no Supabase');
+      throw new Error(friendly(error.message));
+    }
   }
   insertReadings(rows: Reading[]) {
     return this.chunked(rows.map(strip), (part) => this.sb.from('readings').insert(part));
@@ -266,6 +278,12 @@ class LocalBackend implements Backend {
       d.books = d.books.filter((b) => b.id !== id);
       d.readings = d.readings.filter((r) => r.book_id !== id);
       d.quotes = d.quotes.filter((q) => q.book_id !== id);
+    });
+  }
+  reorderBooks(ids: string[]) {
+    const pos = new Map(ids.map((id, i) => [id, i + 1]));
+    return this.mutate((d) => {
+      d.books = d.books.map((b) => (pos.has(b.id) ? { ...b, shelf_position: pos.get(b.id)! } : b));
     });
   }
   insertReadings(rows: Reading[]) {

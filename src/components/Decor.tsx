@@ -113,3 +113,66 @@ export function HeroLandscape() {
     </svg>
   );
 }
+
+export function ShelfCactus() {
+  return (
+    <svg width="44" height="80" viewBox="0 0 44 80" aria-hidden="true" className="shelf-deco">
+      <path d="M22 50 V20 a7 7 0 0 1 14 0 V50 z" fill="#6E8B5E" transform="translate(-7 0)" />
+      <path d="M10 40 V30 a4 4 0 0 1 8 0 V44" fill="#7F9C6C" />
+      <path d="M26 36 V26 a4 4 0 0 1 8 0 V40" fill="#7F9C6C" />
+      <path d="M22 18 V48 M18 22 V46 M26 22 V46" stroke="#5E7A4F" strokeWidth="0.8" />
+      <circle cx="22" cy="12.5" r="3" fill="#E7A7A0" />
+      <path d="M8 52 h28 l-3 26 h-22 z" fill="#E0C49C" />
+      <rect x="6" y="49" width="32" height="6" rx="3" fill="#C9A57E" />
+    </svg>
+  );
+}
+
+export function ShelfFrame() {
+  return (
+    <svg width="58" height="72" viewBox="0 0 58 72" aria-hidden="true" className="shelf-deco">
+      <rect x="4" y="6" width="50" height="62" rx="3" fill="#9C6B43" />
+      <rect x="9" y="11" width="40" height="52" rx="1.5" fill="#F6E9C9" />
+      <circle cx="38" cy="24" r="5" fill="#E2B04A" opacity="0.8" />
+      <path d="M9 50 Q 22 36, 34 46 T 49 42 V63 H9 Z" fill="#A3B18A" />
+      <path d="M9 56 Q 26 48, 49 54 V63 H9 Z" fill="#6E8B5E" />
+      <path d="M20 72 L26 64 M38 72 L32 64" stroke="#5C3D26" strokeWidth="2" />
+    </svg>
+  );
+}
+
+export function ShelfMug() {
+  return (
+    <svg width="54" height="62" viewBox="0 0 54 62" aria-hidden="true" className="shelf-deco">
+      <path d="M18 10 c-4 5, 4 8, 0 14 M26 6 c-4 6, 4 9, 0 16" stroke="#C9B89A" strokeWidth="1.8" fill="none" strokeLinecap="round" className="steam" />
+      <path d="M8 28 h30 v22 a8 8 0 0 1 -8 8 h-14 a8 8 0 0 1 -8 -8 z" fill="#C4855E" />
+      <path d="M38 33 h4 a6 6 0 0 1 0 12 h-4" stroke="#C4855E" strokeWidth="4" fill="none" />
+      <path d="M8 36 h30" stroke="#F6E9C9" strokeWidth="2" opacity="0.6" />
+      <ellipse cx="23" cy="60" rx="18" ry="2" fill="#5C3D26" opacity="0.25" />
+    </svg>
+  );
+}
+
+export function ShelfCandle() {
+  return (
+    <svg width="40" height="78" viewBox="0 0 40 78" aria-hidden="true" className="shelf-deco">
+      <path d="M20 8 c5 7, 5 12, 0 16 c-5 -4, -5 -9, 0 -16 z" fill="#E2B04A" className="flame" />
+      <path d="M20 14 c2 4, 2 6, 0 8 c-2 -2, -2 -4, 0 -8 z" fill="#FBF8EF" />
+      <path d="M20 24 v5" stroke="#4A3221" strokeWidth="1.5" />
+      <rect x="11" y="29" width="18" height="40" rx="3" fill="#F6E9C9" />
+      <path d="M13 29 v8 a2 2 0 0 0 4 0 v-4" fill="#EADBB5" />
+      <ellipse cx="20" cy="71" rx="17" ry="4" fill="#9C6B43" />
+      <rect x="3" y="69" width="34" height="6" rx="3" fill="#7A5235" />
+    </svg>
+  );
+}
+
+/** um enfeite por prateleira, alternando; a largura serve para reservar espaço */
+export const SHELF_DECOR = [
+  { el: ShelfPlant, w: 62 },
+  { el: ShelfStack, w: 82 },
+  { el: ShelfCactus, w: 54 },
+  { el: ShelfFrame, w: 68 },
+  { el: ShelfMug, w: 64 },
+  { el: ShelfCandle, w: 50 }
+];

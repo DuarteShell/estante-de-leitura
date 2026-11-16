@@ -50,6 +50,15 @@ create table if not exists public.books (
   updated_at   timestamptz not null default now()
 );
 create index if not exists books_user_idx on public.books (user_id);
+-- sagas e ordem manual na estante
+alter table public.books add column if not exists series         text;
+alter table public.books add column if not exists series_index   numeric(5, 1);
+alter table public.books add column if not exists series_total   int;
+alter table public.books add column if not exists shelf_position int;
+do $$ begin
+  alter table public.books add constraint books_series_numbers
+    check ((series_index is null or series_index >= 0) and (series_total is null or series_total > 0));
+exception when duplicate_object then null; end $$;
 
 -- ---------- Leituras (cada vez que um livro foi lido) ----------
 -- Um livro "lido" sem nenhuma leitura registrada = leitura legado.
@@ -145,6 +154,17 @@ language sql security definer set search_path = public stable as $$
   select not exists (select 1 from public.profiles where username = lower(u));
 $$;
 grant execute on function public.username_available(text) to anon, authenticated;
+
+-- Ordem manual da estante: grava a posição de vários livros numa chamada só.
+-- Roda com as permissões de quem chama (RLS vale): só mexe nos próprios livros.
+create or replace function public.reorder_books(ids uuid[]) returns void
+language sql security invoker set search_path = public as $$
+  update public.books b
+  set shelf_position = o.pos
+  from unnest(ids) with ordinality as o(id, pos)
+  where b.id = o.id and b.user_id = auth.uid();
+$$;
+grant execute on function public.reorder_books(uuid[]) to authenticated;
 
 -- ---------- Segurança (RLS) ----------
 alter table public.profiles enable row level security;

@@ -33,6 +33,9 @@ export function BookForm({
   const [genres, setGenres] = useState<string[]>(initial?.genres ?? []);
   const [genreText, setGenreText] = useState('');
   const [owned, setOwned] = useState(initial?.owned ?? true);
+  const [series, setSeries] = useState(initial?.series ?? '');
+  const [seriesIndex, setSeriesIndex] = useState(initial?.series_index != null ? String(initial.series_index) : '');
+  const [seriesTotal, setSeriesTotal] = useState(initial?.series_total != null ? String(initial.series_total) : '');
   const [status, setStatus] = useState<BookStatus>(initial?.status ?? 'nao_lido');
   const [registerReading, setRegisterReading] = useState(true);
   const [draft, setDraft] = useState<ReadingDraft>(() => draftFrom());
@@ -48,6 +51,23 @@ export function BookForm({
     const mine = [...used.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g);
     return [...new Set([...mine, ...COMMON_GENRES])].filter((g) => !genres.includes(g)).slice(0, 12);
   }, [books, genres]);
+
+  /** sagas já usadas na estante, com o total conhecido */
+  const knownSeries = useMemo(() => {
+    const m = new Map<string, number | null>();
+    books.forEach((b) => {
+      if (!b.series) return;
+      const prev = m.get(b.series) ?? null;
+      m.set(b.series, Math.max(prev ?? 0, b.series_total ?? 0) || prev);
+    });
+    return m;
+  }, [books]);
+
+  const pickSeries = (v: string) => {
+    setSeries(v);
+    const total = knownSeries.get(v.trim());
+    if (total && !seriesTotal) setSeriesTotal(String(total));
+  };
 
   const addGenre = (g: string) => {
     const v = g.trim();
@@ -69,6 +89,13 @@ export function BookForm({
       genres: pendingGenre && !genres.includes(pendingGenre) ? [...genres, pendingGenre] : genres,
       owned: status === 'desejo' ? false : owned
     };
+    // só manda os campos de saga se forem usados (ou se o livro já tinha saga e foi limpo)
+    if (series.trim() || initial?.series) {
+      const name = series.trim() || null;
+      book.series = name;
+      book.series_index = name && seriesIndex ? Number(seriesIndex.replace(',', '.')) : null;
+      book.series_total = name && seriesTotal ? Number(seriesTotal) : null;
+    }
     let reading: Partial<Reading> | null = null;
     if (mode === 'create') {
       book.status = status;
@@ -171,6 +198,28 @@ export function BookForm({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="field">
+        <span>Saga / série</span>
+        <input className="input" list="series-list" placeholder="Ex.: Trono de Vidro (deixe vazio se for livro único)" value={series} onChange={(e) => pickSeries(e.target.value)} />
+        <datalist id="series-list">
+          {[...knownSeries.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        {series.trim() && (
+          <div className="grid grid-2">
+            <label className="field">
+              <span>Livro nº</span>
+              <input className="input" inputMode="decimal" placeholder="2" value={seriesIndex} onChange={(e) => setSeriesIndex(e.target.value.replace(/[^0-9.,]/g, ''))} />
+            </label>
+            <label className="field">
+              <span>Total da saga</span>
+              <input className="input" type="number" inputMode="numeric" min={1} placeholder="5" value={seriesTotal} onChange={(e) => setSeriesTotal(e.target.value)} />
+            </label>
+          </div>
+        )}
       </div>
 
       {mode === 'create' && (

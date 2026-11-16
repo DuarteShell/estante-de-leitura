@@ -35,6 +35,8 @@ interface Ctx extends LibraryData {
   addBook: (b: NewBook, reading?: NewReading | null) => Promise<string>;
   updateBook: (id: string, patch: Partial<Book>) => Promise<void>;
   deleteBook: (id: string) => Promise<void>;
+  /** ordem manual da estante (todos os ids, na ordem) */
+  reorderBooks: (ids: string[]) => Promise<void>;
   setStatus: (id: string, status: BookStatus) => Promise<void>;
   addReading: (bookId: string, r: NewReading) => Promise<void>;
   updateReading: (id: string, patch: Partial<Reading>) => Promise<void>;
@@ -257,6 +259,16 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             quotes: d.quotes.filter((q) => q.book_id !== id)
           }));
         }),
+      reorderBooks: async (ids) => {
+        // atualiza na tela na hora; se falhar, recarrega do servidor
+        const pos = new Map(ids.map((id, i) => [id, i + 1]));
+        patchState((d) => ({ ...d, books: d.books.map((b) => (pos.has(b.id) ? { ...b, shelf_position: pos.get(b.id)! } : b)) }));
+        try {
+          await run(() => backend.reorderBooks(ids));
+        } catch {
+          await reload();
+        }
+      },
       setStatus: (id, status) => updateBook(id, { status, ...(status === 'lido' ? { current_page: null } : {}) }),
       addReading: (bookId, r) =>
         run(async () => {

@@ -6,7 +6,8 @@ import { Icon } from '../components/Icon';
 import { ReadingModal } from '../components/ReadingForm';
 import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, Modal, STATUS_OPTIONS, Stars, StatusPill } from '../components/ui';
 import type { BookStatus, Reading, ReadingFormat } from '../lib/types';
-import { fmtDate, readingYear } from '../lib/util';
+import { fmtDate, readingYear, seriesBooks, seriesPosition, seriesTotal } from '../lib/util';
+import { STATUS_DOT } from '../lib/types';
 import { useLibrary } from '../store/library';
 
 type Dialog =
@@ -71,6 +72,36 @@ export default function BookDetail() {
     if (book.pages && v >= book.pages) setDialog({ kind: 'finish', status: 'lido' });
   };
 
+  const saga = seriesBooks(book, books);
+  const seriesSection = () => {
+    if (!book.series || saga.length < 2) return null;
+    const read = saga.filter((b) => b.status === 'lido').length;
+    return (
+      <section className="card stack" style={{ gap: 10 }}>
+        <div className="row between">
+          <span className="eyebrow">Nesta saga</span>
+          <span className="tiny muted">
+            {(() => {
+              const total = seriesTotal(book, books);
+              return total && total > saga.length ? `${read} de ${total} lidos · ${saga.length} na estante` : `${read} de ${saga.length} lidos`;
+            })()}
+          </span>
+        </div>
+        <div className="saga-row">
+          {saga.map((b) => (
+            <Link key={b.id} to={`${base}/livro/${b.id}`} className={`saga-item ${b.id === book.id ? 'on' : ''}`} aria-current={b.id === book.id ? 'page' : undefined}>
+              <Cover book={b} width={56} />
+              <span className="tiny row" style={{ gap: 4, justifyContent: 'center' }}>
+                <span className="dot" style={{ background: STATUS_DOT[b.status], width: 8, height: 8 }} />
+                {b.series_index != null ? `#${String(b.series_index).replace('.', ',')}` : '—'}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="stack lg" style={{ maxWidth: 820, margin: '0 auto' }}>
       <div className="hero">
@@ -88,6 +119,12 @@ export default function BookDetail() {
       <div className="stack" style={{ alignItems: 'center', textAlign: 'center', marginTop: -150, gap: 10, position: 'relative' }}>
         <Cover book={book} width={128} />
         <h1 style={{ fontSize: 27, marginTop: 6 }}>{book.title}</h1>
+        {book.series && (
+          <span className="eyebrow" style={{ color: 'var(--wood)' }}>
+            {book.series}
+            {seriesPosition(book, books) && ` · ${seriesPosition(book, books)}`}
+          </span>
+        )}
         <span className="muted">
           {book.author ?? 'Autor desconhecido'}
           {book.pages ? ` · ${book.pages} páginas` : ''}
@@ -103,6 +140,8 @@ export default function BookDetail() {
         </div>
         {lastRating != null && <Stars value={lastRating} size={20} showNumber />}
       </div>
+
+      {seriesSection()}
 
       {canEdit && (
         <section className="stack">

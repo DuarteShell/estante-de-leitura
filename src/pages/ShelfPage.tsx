@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PottedPlant } from '../components/Decor';
 import { Icon } from '../components/Icon';
@@ -7,16 +7,19 @@ import { ChipGroup, Cover, Empty } from '../components/ui';
 import { legacyBooks } from '../lib/stats';
 import type { Book, BookStatus } from '../lib/types';
 import { STATUS_DOT } from '../lib/types';
-import { norm } from '../lib/util';
+import { moveId, useDragReorder, type DropTarget } from '../lib/useDragReorder';
+import { norm, seriesTag } from '../lib/util';
 import { useLibrary } from '../store/library';
 
 type Filter = 'todos' | BookStatus;
-type Sort = 'recentes' | 'titulo' | 'autor' | 'genero' | 'leitura';
+type Sort = 'manual' | 'recentes' | 'titulo' | 'autor' | 'genero' | 'saga' | 'leitura';
 const SORTS: { value: Sort; label: string }[] = [
+  { value: 'manual', label: 'Minha ordem (arrastar)' },
   { value: 'recentes', label: 'Adicionados recentemente' },
   { value: 'titulo', label: 'Título' },
   { value: 'autor', label: 'Autor' },
   { value: 'genero', label: 'Gênero' },
+  { value: 'saga', label: 'Saga' },
   { value: 'leitura', label: 'Data de leitura' }
 ];
 const FILTERS: { value: Filter; label: string }[] = [
@@ -28,17 +31,51 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'desejo', label: 'Desejos' }
 ];
 
+/** preferências da estante que ficam salvas neste navegador */
+const pref = {
+  get: (k: string) => {
+    try {
+      return localStorage.getItem(`estante:${k}`);
+    } catch {
+      return null;
+    }
+  },
+  set: (k: string, v: string) => {
+    try {
+      localStorage.setItem(`estante:${k}`, v);
+    } catch {
+      /* ok */
+    }
+  }
+};
+
+/** ordem manual: posição salva primeiro; livros sem posição vão para o fim, pela data em que entraram */
+const manualOrder = (a: Book, b: Book) =>
+  (a.shelf_position ?? Number.MAX_SAFE_INTEGER) - (b.shelf_position ?? Number.MAX_SAFE_INTEGER) || a.created_at.localeCompare(b.created_at);
+
 export default function ShelfPage() {
-  const { books, readings, canEdit, base } = useLibrary();
+  const { books, readings, canEdit, base, reorderBooks } = useLibrary();
   const [params, setParams] = useSearchParams();
   const filter = (params.get('f') as Filter) || 'todos';
   const onlyLegacy = params.get('legado') === '1';
   const [q, setQ] = useState('');
   const [view, setView] = useState<'estante' | 'capas'>(() => (localStorage.getItem('estante:view') as 'estante' | 'capas') || 'estante');
-  const [onlyOwned, setOnlyOwned] = useState(false);
+  const [onlyOwned, setOnlyOwnedState] = useState(() => pref.get('tenho') === '1');
+  const setOnlyOwned = (v: boolean) => {
+    setOnlyOwnedState(v);
+    pref.set('tenho', v ? '1' : '0');
+  };
+  const [arranging, setArranging] = useState(false);
+
+  // volta para o último filtro de status usado (a lista de desejos é uma página à parte, não entra)
+  useEffect(() => {
+    if (params.has('f') || params.has('legado')) return;
+    const saved = pref.get('filtro');
+    if (saved && saved !== 'todos' && saved !== 'desejo' && FILTERS.some((f) => f.value === saved)) setParams({ f: saved }, { replace: true });
+  }, [params, setParams]);
   const [sort, setSortState] = useState<Sort>(() => {
     try {
-      const v = localStorage.getItem('estante:sort') as Sort | null;
+      const v = pref.get('sort') as Sort | null;
       return v && SORTS.some((o) => o.value === v) ? v : 'recentes';
     } catch {
       return 'recentes';
@@ -46,11 +83,8 @@ export default function ShelfPage() {
   });
   const setSort = (v: Sort) => {
     setSortState(v);
-    try {
-      localStorage.setItem('estante:sort', v);
-    } catch {
-      /* ok */
-    }
+    pref.set('sort', v);
+    if (v !== 'manual') setArranging(false);
   };
 
   /** data da leitura concluída mais recente de cada livro */
@@ -78,12 +112,15 @@ export default function ShelfPage() {
         (filter === 'todos' || b.status === filter) &&
         (!onlyLegacy || legacyIds.has(b.id)) &&
         (!onlyOwned || b.owned) &&
-        (!nq || norm(b.title).includes(nq) || norm(b.author).includes(nq) || b.genres.some((g) => norm(g).includes(nq)))
+        (!nq || norm(b.title).includes(nq) || norm(b.author).includes(nq) || norm(b.series).includes(nq) || b.genres.some((g) => norm(g).includes(nq)))
     );
     const byTitle = (a: Book, b: Book) => a.title.localeCompare(b.title, 'pt-BR');
     // vazios (sem autor/gênero/data) vão para o fim
     const text = (x: string | null | undefined, y: string | null | undefined) => (!x ? (y ? 1 : 0) : !y ? -1 : x.localeCompare(y, 'pt-BR'));
-    if (sort === 'titulo') out.sort(byTitle);
+    if (sort === 'manual') out.sort(manualOrder);
+    else if (sort === 'titulo') out.sort(byTitle);
+    else if (sort === 'saga')
+      out.sort((a, b) => text(a.series, b.series) || (a.series_index ?? 999) - (b.series_index ?? 999) || byTitle(a, b));
     else if (sort === 'autor') out.sort((a, b) => text(a.author, b.author) || byTitle(a, b));
     else if (sort === 'genero') out.sort((a, b) => text(a.genres[0], b.genres[0]) || text(a.author, b.author) || byTitle(a, b));
     else if (sort === 'leitura')
@@ -96,7 +133,16 @@ export default function ShelfPage() {
     return out;
   }, [books, filter, onlyLegacy, onlyOwned, q, sort, legacyIds, lastRead]);
 
+  /** solta o livro arrastado: recalcula a ordem de TODA a estante (mesmo com filtro ativo) */
+  const onReorder = (dragId: string, target: DropTarget) => {
+    const all = [...books].sort(manualOrder).map((b) => b.id);
+    const next = moveId(all, dragId, target);
+    if (next.join() !== all.join()) reorderBooks(next);
+  };
+  const coverDrag = useDragReorder(arranging && view === 'capas', onReorder);
+
   const setFilter = (f: Filter) => {
+    if (f !== 'desejo') pref.set('filtro', f);
     const p = new URLSearchParams();
     if (f !== 'todos') p.set('f', f);
     setParams(p, { replace: true });
@@ -149,7 +195,7 @@ export default function ShelfPage() {
       />
 
       <div className="row wrap small" style={{ gap: 16 }}>
-        <label className="row" style={{ gap: 8, fontWeight: 700 }}>
+        <label className="check">
           <input type="checkbox" checked={onlyOwned} onChange={(e) => setOnlyOwned(e.target.checked)} />
           Só os que tenho
         </label>
@@ -168,7 +214,25 @@ export default function ShelfPage() {
             ))}
           </select>
         </label>
+        {canEdit && (
+          <button
+            type="button"
+            className={`btn btn-sm ${arranging ? 'btn-primary' : ''}`}
+            onClick={() => {
+              if (!arranging && sort !== 'manual') setSort('manual');
+              setArranging(!arranging);
+            }}
+          >
+            {arranging ? 'Pronto' : 'Reorganizar'}
+          </button>
+        )}
       </div>
+
+      {arranging && (
+        <p className="small card flat" role="status" style={{ margin: 0, background: 'var(--sage-l)', border: 'none' }}>
+          Arraste os livros para trocar de lugar. A ordem fica salva sozinha. Toque em <b>Pronto</b> quando terminar.
+        </p>
+      )}
 
       {list.length === 0 ? (
         <Empty
@@ -184,7 +248,7 @@ export default function ShelfPage() {
         </Empty>
       ) : view === 'estante' ? (
         <>
-          <Shelf books={list} />
+          <Shelf books={list} reorder={arranging} onReorder={onReorder} />
           <div className="row wrap tiny muted" style={{ gap: 14 }}>
             {(['lido', 'lendo', 'nao_lido', 'abandonado', 'desejo'] as BookStatus[]).map((s) => (
               <span key={s} className="row" style={{ gap: 6 }}>
@@ -196,11 +260,22 @@ export default function ShelfPage() {
           </div>
         </>
       ) : (
-        <div className="cover-grid">
+        <div className={`cover-grid ${arranging ? 'reordering' : ''}`}>
           {list.map((b) => (
-            <Link key={b.id} to={`${base}/livro/${b.id}`}>
+            <Link
+              key={b.id}
+              to={`${base}/livro/${b.id}`}
+              draggable={false}
+              className={`${coverDrag.dragId === b.id ? 'drag-src' : ''} ${coverDrag.over?.id === b.id ? (coverDrag.over.after ? 'drop-after' : 'drop-before') : ''}`}
+              {...coverDrag.itemProps(b.id)}
+            >
               <Cover book={b} width={104} className="cover-fluid" />
               <span className="t">{b.title}</span>
+              {b.series && (
+                <span className="saga-tag">
+                  {b.series} {seriesTag(b, books) ?? ''}
+                </span>
+              )}
               <span className="tiny muted row" style={{ gap: 6 }}>
                 <span className="dot" style={{ background: STATUS_DOT[b.status], width: 8, height: 8 }} />
                 {b.author ?? '—'}

@@ -38,6 +38,9 @@ export function exportCsv(d: LibraryData) {
       Status: STATUS_LABEL[b.status],
       'Tenho o livro': b.owned ? 'Sim' : 'Não',
       Gênero: b.genres.join(', '),
+      Saga: b.series ?? '',
+      'Nº na saga': b.series_index ?? '',
+      'Total da saga': b.series_total ?? '',
       'Total de páginas': b.pages ?? '',
       ISBN: b.isbn ?? '',
       Capa: b.cover_url && !b.cover_url.startsWith('data:') ? b.cover_url : ''

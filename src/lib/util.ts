@@ -78,3 +78,38 @@ export function downloadFile(name: string, content: string, type: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+/* ---------- Sagas ---------- */
+
+const fmtIndex = (n: number) => String(n).replace('.', ',');
+
+/** livros da mesma saga, em ordem */
+export function seriesBooks(book: Pick<Book, 'series'>, books: Book[]): Book[] {
+  if (!book.series) return [];
+  const key = norm(book.series);
+  return books
+    .filter((b) => b.series && norm(b.series) === key)
+    .sort((a, b) => (a.series_index ?? 999) - (b.series_index ?? 999) || a.title.localeCompare(b.title, 'pt-BR'));
+}
+
+/** total da saga: o maior informado entre os livros dela */
+export function seriesTotal(book: Pick<Book, 'series' | 'series_total'>, books: Book[]): number | null {
+  const all = seriesBooks(book, books);
+  const t = Math.max(book.series_total ?? 0, ...all.map((b) => b.series_total ?? 0));
+  return t > 0 ? t : null;
+}
+
+/** "Livro 2 de 5" / "Livro 2" / null */
+export function seriesPosition(book: Book, books: Book[]): string | null {
+  if (!book.series) return null;
+  const total = seriesTotal(book, books);
+  if (book.series_index == null) return total ? `${total} livros` : null;
+  return `Livro ${fmtIndex(book.series_index)}${total ? ` de ${total}` : ''}`;
+}
+
+/** "#2/5" curtinho para capas e lombadas */
+export function seriesTag(book: Book, books: Book[]): string | null {
+  if (!book.series || book.series_index == null) return null;
+  const total = seriesTotal(book, books);
+  return `#${fmtIndex(book.series_index)}${total ? `/${total}` : ''}`;
+}
