@@ -4,6 +4,8 @@ export type ReadingFormat = 'fisico' | 'kindle' | 'audiobook' | 'outro';
 
 export interface Profile {
   id: string;
+  username: string;
+  is_public: boolean;
   display_name: string;
   site_title: string | null;
   bio: string | null;

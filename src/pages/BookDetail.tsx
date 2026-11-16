@@ -23,7 +23,7 @@ export default function BookDetail() {
   const { id } = useParams();
   const nav = useNavigate();
   const lib = useLibrary();
-  const { books, readings, quotes, canEdit } = lib;
+  const { books, readings, quotes, canEdit, base } = lib;
   const book = books.find((b) => b.id === id);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [page, setPage] = useState('');
@@ -41,7 +41,7 @@ export default function BookDetail() {
 
   if (!book) {
     return (
-      <Empty action={<Link className="btn" to="/estante">Ir para a estante</Link>}>
+      <Empty action={<Link className="btn" to={`${base}/estante`}>Ir para a estante</Link>}>
         Livro não encontrado.
       </Empty>
     );
@@ -379,7 +379,7 @@ export default function BookDetail() {
               style={{ background: 'var(--danger)', color: '#fff', borderColor: 'var(--danger)' }}
               onClick={async () => {
                 await lib.deleteBook(book.id);
-                nav('/estante', { replace: true });
+                nav(`${base}/estante`, { replace: true });
               }}
             >
               Remover

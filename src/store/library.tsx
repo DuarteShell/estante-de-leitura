@@ -1,21 +1,35 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { backend } from '../lib/backend';
+import { backend, type PublicShelf } from '../lib/backend';
 import type { Book, BookStatus, LibraryData, Profile, Quote, Reading } from '../lib/types';
 import { nowIso, todayIso, uid } from '../lib/util';
 
 type NewBook = Partial<Book> & { title: string };
 type NewReading = Partial<Reading>;
 
+export type ViewStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+
 interface Ctx extends LibraryData {
-  loading: boolean;
+  /** sessão */
+  authReady: boolean;
+  userId: string | null;
+  me: Profile | null;
+  myBase: string | null;
+  /** estante sendo vista (a própria ou de outra pessoa) */
+  viewing: string | null;
+  status: ViewStatus;
   error: string | null;
+  base: string;
+  view: (username: string) => void;
   mode: 'supabase' | 'local';
   canEdit: boolean;
-  userId: string | null;
   toast: string | null;
   notify: (msg: string) => void;
   reload: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  usernameAvailable: (u: string) => Promise<boolean>;
+  signUp: (username: string, displayName: string, pin: string) => Promise<void>;
+  signIn: (username: string, pin: string) => Promise<void>;
+  changePin: (pin: string) => Promise<void>;
+  listPublic: () => Promise<PublicShelf[]>;
   signOut: () => Promise<void>;
   saveProfile: (p: Partial<Profile>) => Promise<void>;
   addBook: (b: NewBook, reading?: NewReading | null) => Promise<string>;
@@ -68,14 +82,21 @@ export const makeReading = (bookId: string, r: NewReading): Reading => ({
 });
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<LibraryData>({ profile: null, books: [], readings: [], quotes: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const empty: LibraryData = { profile: null, books: [], readings: [], quotes: [] };
+  const [data, setData] = useState<LibraryData>(empty);
+  const [authReady, setAuthReady] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [me, setMe] = useState<Profile | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const [status, setStatus] = useState<ViewStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number>();
   const dataRef = useRef(data);
   dataRef.current = data;
+  const viewingRef = useRef(viewing);
+  viewingRef.current = viewing;
+  const loadSeq = useRef(0);
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -83,28 +104,65 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   }, []);
 
-  const reload = useCallback(async () => {
+  const refreshAuth = useCallback(async () => {
     try {
-      setError(null);
-      const [id, all] = await Promise.all([backend.currentUserId(), backend.loadAll()]);
+      const [id, profile] = await Promise.all([backend.currentUserId(), backend.myProfile()]);
       setUserId(id);
-      setData(all);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao carregar');
+      setMe(profile);
+    } catch {
+      setUserId(null);
+      setMe(null);
     } finally {
-      setLoading(false);
+      setAuthReady(true);
     }
   }, []);
 
+  const load = useCallback(async (username: string) => {
+    const seq = ++loadSeq.current;
+    setStatus('loading');
+    setError(null);
+    try {
+      const lib = await backend.loadLibrary(username);
+      if (seq !== loadSeq.current) return;
+      if (!lib) {
+        setData(empty);
+        setStatus('missing');
+      } else {
+        setData(lib);
+        setStatus('ready');
+      }
+    } catch (e) {
+      if (seq !== loadSeq.current) return;
+      setError(e instanceof Error ? e.message : 'Erro ao carregar');
+      setStatus('error');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const view = useCallback(
+    (username: string) => {
+      const u = username.toLowerCase();
+      if (u === viewingRef.current) return;
+      viewingRef.current = u;
+      setViewing(u);
+      load(u);
+    },
+    [load]
+  );
+
+  const reload = useCallback(async () => {
+    await refreshAuth();
+    if (viewingRef.current) await load(viewingRef.current);
+  }, [refreshAuth, load]);
+
   useEffect(() => {
-    reload();
+    refreshAuth();
     return backend.onAuthChange(() => {
-      setLoading(true);
       reload();
     });
-  }, [reload]);
+  }, [refreshAuth, reload]);
 
-  const canEdit = !!userId && (backend.mode === 'local' || !data.profile || data.profile.id === userId);
+  const canEdit = !!userId && status === 'ready' && data.profile?.id === userId;
 
   const patchState = (fn: (d: LibraryData) => LibraryData) => setData((d) => fn(d));
 
@@ -150,16 +208,24 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [updateBook]
   );
 
-  const api = useMemo<Omit<Ctx, keyof LibraryData | 'loading' | 'error' | 'canEdit' | 'userId' | 'toast' | 'displayName' | 'siteTitle'>>(
+  const api = useMemo<
+    Omit<Ctx, keyof LibraryData | 'authReady' | 'me' | 'myBase' | 'viewing' | 'status' | 'base' | 'view' | 'error' | 'canEdit' | 'userId' | 'toast' | 'displayName' | 'siteTitle'>
+  >(
     () => ({
       mode: backend.mode,
       notify,
       reload,
-      signIn: (email, password) =>
-        run(async () => {
-          await backend.signIn(email, password);
-          await reload();
-        }),
+      usernameAvailable: (u) => backend.usernameAvailable(u),
+      listPublic: () => backend.listPublic(),
+      signUp: async (username, displayName, pin) => {
+        await backend.signUp(username, displayName, pin);
+        await refreshAuth();
+      },
+      signIn: async (username, pin) => {
+        await backend.signIn(username, pin);
+        await refreshAuth();
+      },
+      changePin: (pin) => run(() => backend.changePin(pin)),
       signOut: () =>
         run(async () => {
           await backend.signOut();
@@ -168,7 +234,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       saveProfile: (p) =>
         run(async () => {
           const profile = await backend.saveProfile(p);
-          patchState((d) => ({ ...d, profile }));
+          setMe(profile);
+          patchState((d) => (d.profile?.id === profile.id ? { ...d, profile } : d));
         }),
       addBook: (b, reading) =>
         run(async () => {
@@ -267,7 +334,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         }),
       uploadCover: (file) => run(() => backend.uploadCover(file))
     }),
-    [notify, reload, run, updateBook, syncStatus]
+    [notify, reload, refreshAuth, run, updateBook, syncStatus]
   );
 
   const displayName = data.profile?.display_name || 'Leitor';
@@ -277,7 +344,23 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     document.title = siteTitle;
   }, [siteTitle]);
 
-  const value: Ctx = { ...data, ...api, loading, error, canEdit, userId, toast, displayName, siteTitle };
+  const value: Ctx = {
+    ...data,
+    ...api,
+    authReady,
+    userId,
+    me,
+    myBase: me ? `/u/${me.username}` : null,
+    viewing,
+    status,
+    error,
+    base: `/u/${data.profile?.username ?? viewing ?? ''}`,
+    view,
+    canEdit,
+    toast,
+    displayName,
+    siteTitle
+  };
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
 }
 

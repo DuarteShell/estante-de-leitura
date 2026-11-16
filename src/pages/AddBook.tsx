@@ -12,7 +12,7 @@ import { useLibrary } from '../store/library';
 type Mode = 'scan' | 'search' | 'manual';
 
 export default function AddBook() {
-  const { canEdit, addBook, books, notify } = useLibrary();
+  const { canEdit, addBook, books, notify, base } = useLibrary();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const startStatus = (params.get('status') as BookStatus) || 'nao_lido';
@@ -176,7 +176,7 @@ export default function AddBook() {
         <div className="stack lg">
           {message && <p className="small muted" style={{ margin: 0 }}>{message}</p>}
           {duplicate && (
-            <Link to={`/livro/${duplicate.id}`} className="card flat small" style={{ textDecoration: 'none', color: '#8A3B22', background: '#F8E8E0' }}>
+            <Link to={`${base}/livro/${duplicate.id}`} className="card flat small" style={{ textDecoration: 'none', color: '#8A3B22', background: '#F8E8E0' }}>
               Você já tem “{duplicate.title}” cadastrado. Toque pra abrir, ou continue se for outra edição.
             </Link>
           )}
@@ -189,7 +189,7 @@ export default function AddBook() {
               onSubmit={async ({ book, reading }) => {
                 const id = await addBook(book, reading);
                 notify(book.status === 'desejo' ? 'Adicionado à lista de desejos 💚' : 'Livro na estante! 📚');
-                nav(`/livro/${id}`, { replace: true });
+                nav(`${base}/livro/${id}`, { replace: true });
               }}
             />
           </div>

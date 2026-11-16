@@ -1,55 +1,74 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
+import { PinInput } from '../components/PinInput';
 import { useLibrary } from '../store/library';
 
 export default function Login() {
-  const { signIn, canEdit, mode } = useLibrary();
+  const { signIn, me, mode } = useLibrary();
   const nav = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [params] = useSearchParams();
+  const [username, setUsername] = useState(params.get('u') ?? '');
+  const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (mode === 'local' || canEdit) return <Navigate to="/" replace />;
+  if (mode === 'local' || me) return <Navigate to={me ? `/u/${me.username}` : '/'} replace />;
+
+  const submit = async (p = pin) => {
+    if (!username || p.length !== 6 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await signIn(username.trim().toLowerCase(), p);
+      nav(`/u/${username.trim().toLowerCase()}`, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível entrar');
+      setPin('');
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="stack lg" style={{ maxWidth: 420, margin: '6vh auto 0', position: 'relative' }}>
       <HangingPlant style={{ position: 'absolute', right: -10, top: -60 }} />
       <h1>Entrar</h1>
-      <p className="muted" style={{ margin: 0 }}>Só a dona/dono da estante precisa entrar. Visitantes veem tudo sem login.</p>
+      <p className="muted" style={{ margin: 0 }}>Seu @ e o PIN de 6 dígitos.</p>
       <form
         className="card stack lg"
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
-          setBusy(true);
-          setError(null);
-          try {
-            await signIn(email.trim(), password);
-            nav('/', { replace: true });
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Não foi possível entrar');
-            setBusy(false);
-          }
+          submit();
         }}
       >
         <label className="field">
-          <span>E-mail</span>
-          <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <span>@usuário</span>
+          <div className="at-input">
+            <b>@</b>
+            <input
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+            />
+          </div>
         </label>
-        <label className="field">
-          <span>Senha</span>
-          <input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
+        <PinInput label="PIN" value={pin} onChange={setPin} onComplete={(v) => submit(v)} />
         {error && (
           <p className="small" role="alert" style={{ margin: 0, color: 'var(--danger)' }}>
             {error}
           </p>
         )}
-        <button className="btn btn-primary" disabled={busy}>
+        <button className="btn btn-primary" disabled={busy || !username || pin.length !== 6}>
           {busy ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
+      <p className="small muted" style={{ textAlign: 'center', margin: 0 }}>
+        Ainda não tem estante? <Link to="/criar">Criar a minha</Link>
+      </p>
     </div>
   );
 }

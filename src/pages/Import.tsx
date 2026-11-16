@@ -26,6 +26,7 @@ const FIELDS = Object.keys(FIELD_LABEL) as Field[];
 
 export default function Import() {
   const lib = useLibrary();
+  const { base } = lib;
   const nav = useNavigate();
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [backup, setBackup] = useState<Backup | null>(null);
@@ -141,7 +142,7 @@ export default function Import() {
     try {
       await lib.importBatch(books, readings);
       lib.notify(`${books.length} livros e ${readings.length} leituras importados 📚`);
-      nav('/estante');
+      nav(`${base}/estante`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao importar');
       setProgress(null);
@@ -165,7 +166,7 @@ export default function Import() {
         await lib.saveProfile({ display_name, site_title, bio, annual_goal });
       }
       lib.notify(`Backup restaurado: ${books.length} livros novos`);
-      nav('/');
+      nav(base);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao restaurar');
       setProgress(null);

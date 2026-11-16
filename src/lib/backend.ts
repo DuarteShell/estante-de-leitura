@@ -1,14 +1,27 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Book, LibraryData, Profile, Quote, Reading } from './types';
 
+export interface PublicShelf {
+  username: string;
+  display_name: string;
+  site_title: string | null;
+  bio: string | null;
+}
+
 export interface Backend {
   mode: 'supabase' | 'local';
-  /** id do usuário logado (quem pode editar) ou null para visitantes */
+  /** id do usuário logado ou null */
   currentUserId(): Promise<string | null>;
+  myProfile(): Promise<Profile | null>;
   onAuthChange(cb: () => void): () => void;
-  signIn(email: string, password: string): Promise<void>;
+  usernameAvailable(username: string): Promise<boolean>;
+  signUp(username: string, displayName: string, pin: string): Promise<void>;
+  signIn(username: string, pin: string): Promise<void>;
+  changePin(pin: string): Promise<void>;
   signOut(): Promise<void>;
-  loadAll(): Promise<LibraryData>;
+  /** estante de alguém pelo @ — null se não existe ou é privada */
+  loadLibrary(username: string): Promise<LibraryData | null>;
+  listPublic(): Promise<PublicShelf[]>;
   saveProfile(p: Partial<Profile>): Promise<Profile>;
   insertBooks(rows: Book[]): Promise<void>;
   updateBook(id: string, patch: Partial<Book>): Promise<void>;
@@ -21,11 +34,26 @@ export interface Backend {
   uploadCover(file: File): Promise<string>;
 }
 
+export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+export const PIN_RE = /^\d{6}$/;
+/** O Supabase Auth exige e-mail: usamos um e-mail técnico derivado do @ (nenhum e-mail é enviado). */
+const authEmail = (username: string) => `${username.toLowerCase()}@estante-de-leitura.app`;
+
 const strip = <T extends object>(row: T): T => {
   const copy = { ...row } as Record<string, unknown>;
   delete copy.user_id;
   return copy as T;
 };
+
+function friendly(msg: string) {
+  if (/invalid login credentials/i.test(msg)) return '@usuário ou PIN incorretos';
+  if (/already registered|already exists/i.test(msg)) return 'Esse @ já está em uso';
+  if (/rate limit|too many/i.test(msg)) return 'Muitas tentativas. Espere alguns minutos e tente de novo';
+  if (/signups not allowed/i.test(msg)) return 'Cadastros estão desativados no Supabase (veja o README)';
+  if (/email not confirmed/i.test(msg)) return 'Desative "Confirm email" no Supabase (veja o README)';
+  if (/password/i.test(msg) && /(weak|short|least)/i.test(msg)) return 'O PIN precisa ter 6 dígitos';
+  return msg;
+}
 
 /* ------------------------------------------------------------------ */
 /* Supabase                                                            */
@@ -36,7 +64,7 @@ class SupabaseBackend implements Backend {
   constructor(private sb: SupabaseClient) {}
 
   private check<T>(res: { data: T; error: { message: string } | null }): T {
-    if (res.error) throw new Error(res.error.message);
+    if (res.error) throw new Error(friendly(res.error.message));
     return res.data;
   }
 
@@ -45,54 +73,80 @@ class SupabaseBackend implements Backend {
     return data.session?.user.id ?? null;
   }
 
+  async myProfile() {
+    const id = await this.currentUserId();
+    if (!id) return null;
+    return this.check(await this.sb.from('profiles').select('*').eq('id', id).maybeSingle()) as Profile | null;
+  }
+
   onAuthChange(cb: () => void) {
     const { data } = this.sb.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') cb();
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') setTimeout(cb, 0);
     });
     return () => data.subscription.unsubscribe();
   }
 
-  async signIn(email: string, password: string) {
-    const { error } = await this.sb.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message);
+  async usernameAvailable(username: string) {
+    return this.check(await this.sb.rpc('username_available', { u: username })) as boolean;
+  }
+
+  async signUp(username: string, displayName: string, pin: string) {
+    const { data, error } = await this.sb.auth.signUp({
+      email: authEmail(username),
+      password: pin,
+      options: { data: { username: username.toLowerCase(), display_name: displayName } }
+    });
+    if (error) throw new Error(friendly(error.message));
+    if (!data.session) throw new Error('Desative "Confirm email" no Supabase (veja o README)');
+  }
+
+  async signIn(username: string, pin: string) {
+    const { error } = await this.sb.auth.signInWithPassword({ email: authEmail(username), password: pin });
+    if (error) throw new Error(friendly(error.message));
+  }
+
+  async changePin(pin: string) {
+    const { error } = await this.sb.auth.updateUser({ password: pin });
+    if (error) throw new Error(friendly(error.message));
   }
 
   async signOut() {
     await this.sb.auth.signOut();
   }
 
-  async loadAll(): Promise<LibraryData> {
-    // Logado: os próprios dados. Visitante: o perfil público (app de uma pessoa só).
-    let ownerId = await this.currentUserId();
-    if (!ownerId) {
-      const first = this.check(await this.sb.from('profiles').select('id').order('updated_at').limit(1));
-      ownerId = (first as { id: string }[])[0]?.id ?? null;
-    }
-    if (!ownerId) return { profile: null, books: [], readings: [], quotes: [] };
-    const [p, b, r, q] = await Promise.all([
-      this.sb.from('profiles').select('*').eq('id', ownerId).maybeSingle(),
-      this.sb.from('books').select('*').eq('user_id', ownerId).order('created_at').limit(5000),
-      this.sb.from('readings').select('*').eq('user_id', ownerId).limit(10000),
-      this.sb.from('quotes').select('*').eq('user_id', ownerId).order('created_at').limit(10000)
+  async loadLibrary(username: string): Promise<LibraryData | null> {
+    const profile = this.check(await this.sb.from('profiles').select('*').eq('username', username.toLowerCase()).maybeSingle()) as Profile | null;
+    if (!profile) return null;
+    const [b, r, q] = await Promise.all([
+      this.sb.from('books').select('*').eq('user_id', profile.id).order('created_at').limit(5000),
+      this.sb.from('readings').select('*').eq('user_id', profile.id).limit(10000),
+      this.sb.from('quotes').select('*').eq('user_id', profile.id).order('created_at').limit(10000)
     ]);
     return {
-      profile: this.check(p) as Profile | null,
+      profile,
       books: this.check(b) as Book[],
       readings: (this.check(r) as Reading[]).map((x) => ({ ...x, rating: x.rating == null ? null : Number(x.rating) })),
       quotes: this.check(q) as Quote[]
     };
   }
 
+  async listPublic() {
+    return this.check(
+      await this.sb.from('profiles').select('username, display_name, site_title, bio').eq('is_public', true).order('updated_at', { ascending: false }).limit(24)
+    ) as PublicShelf[];
+  }
+
   async saveProfile(patch: Partial<Profile>) {
     const id = await this.currentUserId();
-    if (!id) throw new Error('Faça login para editar');
-    return this.check(await this.sb.from('profiles').upsert({ ...patch, id }).select().single()) as Profile;
+    if (!id) throw new Error('Entre para editar');
+    const { username: _ignored, id: _id, ...rest } = patch;
+    return this.check(await this.sb.from('profiles').update(rest).eq('id', id).select().single()) as Profile;
   }
 
   private async chunked<T>(rows: T[], fn: (part: T[]) => PromiseLike<{ error: { message: string } | null }>) {
     for (let i = 0; i < rows.length; i += 200) {
       const { error } = await fn(rows.slice(i, i + 200));
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(friendly(error.message));
     }
   }
 
@@ -123,7 +177,7 @@ class SupabaseBackend implements Backend {
 
   async uploadCover(file: File) {
     const uid = await this.currentUserId();
-    if (!uid) throw new Error('Faça login para enviar capas');
+    if (!uid) throw new Error('Entre para enviar capas');
     const blob = await shrinkImage(file, 600);
     const path = `${uid}/${crypto.randomUUID()}.jpg`;
     const { error } = await this.sb.storage.from('covers').upload(path, blob, { contentType: 'image/jpeg' });
@@ -133,28 +187,29 @@ class SupabaseBackend implements Backend {
 }
 
 /* ------------------------------------------------------------------ */
-/* Modo local (sem Supabase): tudo no localStorage deste navegador     */
+/* Modo local (sem Supabase): uma estante só, salva neste navegador    */
 /* ------------------------------------------------------------------ */
 
 const LOCAL_KEY = 'estante:v1';
 const LOCAL_ID = 'local';
+export const LOCAL_USERNAME = 'eu';
 
 class LocalBackend implements Backend {
   mode = 'local' as const;
 
   private read(): LibraryData {
+    const fresh: Profile = { id: LOCAL_ID, username: LOCAL_USERNAME, is_public: true, display_name: 'Leitor', site_title: null, bio: null, annual_goal: 24 };
     try {
       const raw = localStorage.getItem(LOCAL_KEY);
-      if (raw) return JSON.parse(raw) as LibraryData;
+      if (raw) {
+        const d = JSON.parse(raw) as LibraryData;
+        d.profile = { ...fresh, ...d.profile, id: LOCAL_ID, username: LOCAL_USERNAME };
+        return d;
+      }
     } catch {
       /* armazenamento indisponível */
     }
-    return {
-      profile: { id: LOCAL_ID, display_name: 'Leitor', site_title: null, bio: null, annual_goal: 24 },
-      books: [],
-      readings: [],
-      quotes: []
-    };
+    return { profile: fresh, books: [], readings: [], quotes: [] };
   }
   private write(d: LibraryData) {
     try {
@@ -173,17 +228,28 @@ class LocalBackend implements Backend {
   async currentUserId() {
     return LOCAL_ID;
   }
+  async myProfile() {
+    return this.read().profile;
+  }
   onAuthChange() {
     return () => {};
   }
+  async usernameAvailable() {
+    return true;
+  }
+  async signUp() {}
   async signIn() {}
+  async changePin() {}
   async signOut() {}
-  async loadAll() {
-    return this.read();
+  async loadLibrary(username: string) {
+    return username === LOCAL_USERNAME ? this.read() : null;
+  }
+  async listPublic() {
+    return [];
   }
   async saveProfile(patch: Partial<Profile>) {
     const d = this.read();
-    d.profile = { ...(d.profile as Profile), ...patch, id: LOCAL_ID };
+    d.profile = { ...(d.profile as Profile), ...patch, id: LOCAL_ID, username: LOCAL_USERNAME };
     this.write(d);
     return d.profile;
   }
@@ -258,7 +324,7 @@ async function shrinkImage(file: File, maxW: number): Promise<Blob> {
 }
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+// Chave pública: a nova "publishable" (sb_publishable_...) ou a antiga "anon"
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
 
-export const backend: Backend =
-  url && key ? new SupabaseBackend(createClient(url, key)) : new LocalBackend();
+export const backend: Backend = url && key ? new SupabaseBackend(createClient(url, key)) : new LocalBackend();

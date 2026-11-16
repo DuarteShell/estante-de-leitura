@@ -10,7 +10,7 @@ import { useLibrary } from '../store/library';
 type Fmt = 'todos' | ReadingFormat;
 
 export default function Readings() {
-  const { books, readings } = useLibrary();
+  const { books, readings, base } = useLibrary();
   const [params, setParams] = useSearchParams();
   const years = useMemo(() => availableYears(readings), [readings]);
   const year = Number(params.get('ano')) || years[0];
@@ -87,7 +87,7 @@ export default function Readings() {
       ) : (
         <div className="book-list">
           {list.map(({ r, b }) => (
-            <Link key={r.id} to={`/livro/${b.id}`} className="book-row" style={{ alignItems: 'flex-start' }}>
+            <Link key={r.id} to={`${base}/livro/${b.id}`} className="book-row" style={{ alignItems: 'flex-start' }}>
               <Cover book={b} width={62} />
               <div className="stack grow" style={{ gap: 5 }}>
                 <span className="t">{b.title}</span>
@@ -119,7 +119,7 @@ export default function Readings() {
       )}
 
       {legacy.length > 0 && (
-        <Link to="/estante?f=lido&legado=1" className="card flat small" style={{ textDecoration: 'none', color: 'var(--ink-2)' }}>
+        <Link to={`${base}/estante?f=lido&legado=1`} className="card flat small" style={{ textDecoration: 'none', color: 'var(--ink-2)' }}>
           + {legacy.length} {legacy.length === 1 ? 'livro lido' : 'livros lidos'} sem registro de data (leituras legado) — ver na estante
         </Link>
       )}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Book } from '../lib/types';
 import { STATUS_DOT, STATUS_LABEL } from '../lib/types';
 import { bookColors, hash } from '../lib/util';
+import { useLibrary } from '../store/library';
 import { ShelfPlant, ShelfStack } from './Decor';
 
 interface Spine {
@@ -22,6 +23,7 @@ const spineOf = (book: Book): Spine => {
 
 /** Estante de madeira: as lombadas se distribuem nas prateleiras conforme a largura da tela. */
 export function Shelf({ books }: { books: Book[] }) {
+  const { base } = useLibrary();
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(330);
 
@@ -65,7 +67,7 @@ export function Shelf({ books }: { books: Book[] }) {
               return (
                 <Link
                   key={book.id}
-                  to={`/livro/${book.id}`}
+                  to={`${base}/livro/${book.id}`}
                   className={`spine ${wish ? 'wish' : ''}`}
                   style={{ width: w, height: h, background: bg }}
                   aria-label={`${book.title} — ${STATUS_LABEL[book.status]}`}

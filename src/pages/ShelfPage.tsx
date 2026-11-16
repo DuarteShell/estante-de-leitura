@@ -21,7 +21,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 export default function ShelfPage() {
-  const { books, readings, canEdit } = useLibrary();
+  const { books, readings, canEdit, base } = useLibrary();
   const [params, setParams] = useSearchParams();
   const filter = (params.get('f') as Filter) || 'todos';
   const onlyLegacy = params.get('legado') === '1';
@@ -130,7 +130,7 @@ export default function ShelfPage() {
         <Empty
           action={
             canEdit && books.length === 0 ? (
-              <Link to="/adicionar" className="btn btn-primary">
+              <Link to={`${base}/adicionar`} className="btn btn-primary">
                 <Icon name="plus" /> Adicionar livro
               </Link>
             ) : undefined
@@ -154,7 +154,7 @@ export default function ShelfPage() {
       ) : (
         <div className="cover-grid">
           {list.map((b) => (
-            <Link key={b.id} to={`/livro/${b.id}`}>
+            <Link key={b.id} to={`${base}/livro/${b.id}`}>
               <Cover book={b} width={104} className="cover-fluid" />
               <span className="t">{b.title}</span>
               <span className="tiny muted row" style={{ gap: 6 }}>

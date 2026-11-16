@@ -29,7 +29,7 @@ function StatCard({ icon, value, label, bg, fg }: { icon: IconName; value: strin
 }
 
 export default function Home() {
-  const { books, readings, profile, canEdit, displayName, siteTitle } = useLibrary();
+  const { books, readings, profile, canEdit, displayName, siteTitle, base } = useLibrary();
   const years = useMemo(() => availableYears(readings), [readings]);
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(thisYear);
@@ -65,10 +65,10 @@ export default function Home() {
           action={
             canEdit && (
               <div className="row wrap" style={{ justifyContent: 'center' }}>
-                <Link to="/adicionar" className="btn btn-primary">
+                <Link to={`${base}/adicionar`} className="btn btn-primary">
                   <Icon name="plus" /> Adicionar livro
                 </Link>
-                <Link to="/importar" className="btn">
+                <Link to={`${base}/importar`} className="btn">
                   <Icon name="upload" /> Importar planilha
                 </Link>
               </div>
@@ -80,7 +80,7 @@ export default function Home() {
       ) : (
         <>
           <div className="row between wrap">
-            <h2>Seu ano em livros</h2>
+            <h2>{canEdit ? 'Seu ano em livros' : 'O ano em livros'}</h2>
             <label className="row small" style={{ gap: 6 }}>
               <span className="muted">Ano</span>
               <select className="select" style={{ width: 'auto', minHeight: 40, padding: '6px 10px' }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
@@ -110,7 +110,7 @@ export default function Home() {
           ) : (
             canEdit &&
             year === thisYear && (
-              <Link to="/perfil" className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+              <Link to={`${base}/perfil`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
                 <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
               </Link>
             )
@@ -133,7 +133,7 @@ export default function Home() {
               <section className="stack span-2">
                 <div className="row between">
                   <h2>Lendo agora</h2>
-                  <Link to="/estante?f=lendo" className="small" style={{ fontWeight: 700, textDecoration: 'none' }}>
+                  <Link to={`${base}/estante?f=lendo`} className="small" style={{ fontWeight: 700, textDecoration: 'none' }}>
                     ver todos
                   </Link>
                 </div>
@@ -142,7 +142,7 @@ export default function Home() {
                     const pct = b.pages && b.current_page ? Math.min(100, Math.round((b.current_page / b.pages) * 100)) : 0;
                     const active = readings.find((r) => r.book_id === b.id && r.status === 'lendo');
                     return (
-                      <Link key={b.id} to={`/livro/${b.id}`} className="book-row">
+                      <Link key={b.id} to={`${base}/livro/${b.id}`} className="book-row">
                         <Cover book={b} width={58} />
                         <div className="stack grow" style={{ gap: 5 }}>
                           <span className="t">{b.title}</span>
@@ -226,7 +226,7 @@ export default function Home() {
                 <h2 style={{ fontSize: 19 }}>Destaques de {year}</h2>
                 <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
                   {s.best && (
-                    <Link to={`/livro/${s.best.book.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+                    <Link to={`${base}/livro/${s.best.book.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
                       <Cover book={s.best.book} width={44} />
                       <div className="stack" style={{ gap: 2 }}>
                         <span className="eyebrow">Melhor nota</span>
@@ -236,7 +236,7 @@ export default function Home() {
                     </Link>
                   )}
                   {s.longest && (
-                    <Link to={`/livro/${s.longest.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+                    <Link to={`${base}/livro/${s.longest.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
                       <Cover book={s.longest} width={44} />
                       <div className="stack" style={{ gap: 2 }}>
                         <span className="eyebrow">Mais longo</span>
