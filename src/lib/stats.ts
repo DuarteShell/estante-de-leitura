@@ -103,7 +103,11 @@ export interface OpenSeries {
   next: Book | null;
   /** posições que faltam cadastrar/comprar (só quando o total é conhecido) */
   missing: number[];
+  /** situação de cada volume, em ordem (para a faixa visual da saga) */
+  volumes: VolumeState[];
 }
+
+export type VolumeState = 'lido' | 'lendo' | 'parado' | 'estante' | 'falta';
 
 export interface Suggestion {
   book: Book;
@@ -170,11 +174,24 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     const read = list.filter((b) => b.status === 'lido').length;
     if (!read) continue;
     const total = seriesTotal(list[0], books);
-    const next = list.find((b) => b.owned && (b.status === 'nao_lido' || b.status === 'lendo')) ?? null;
-    const have = new Set(list.filter((b) => b.owned || b.status === 'lido').map((b) => b.series_index).filter((n): n is number => n != null));
+    // próximo = o volume logo depois do último lido (se abandonado, é retomar ele);
+    // se já está lendo algum, é esse. Volume seguinte que não tenho → sem próximo.
+    const lastRead = list.reduce((acc, b, i) => (b.status === 'lido' ? i : acc), -1);
+    const after = list.slice(lastRead + 1).find((b) => b.status !== 'lido');
+    const lastIdx = list[lastRead]?.series_index;
+    const skipsVolume = after?.series_index != null && lastIdx != null && after.series_index > lastIdx + 1;
+    const next =
+      list.find((b) => b.status === 'lendo') ??
+      (after && !skipsVolume && (after.status === 'abandonado' || (after.owned && after.status === 'nao_lido')) ? after : null);
+    const have = new Set(list.filter((b) => b.owned || b.status === 'lido' || b.status === 'abandonado').map((b) => b.series_index).filter((n): n is number => n != null));
     const missing = total ? Array.from({ length: total }, (_, i) => i + 1).filter((i) => !have.has(i)) : [];
     if (!next && !missing.length) continue;
-    const os = { name: list[0].series!, read, total, next, missing };
+    const state = (b: Book | undefined): VolumeState =>
+      !b ? 'falta' : b.status === 'lido' ? 'lido' : b.status === 'lendo' ? 'lendo' : b.status === 'abandonado' ? 'parado' : b.owned ? 'estante' : 'falta';
+    const volumes: VolumeState[] = total
+      ? Array.from({ length: total }, (_, i) => state(list.find((b) => b.series_index === i + 1 && (b.owned || b.status === 'lido' || b.status === 'abandonado'))))
+      : list.map(state);
+    const os = { name: list[0].series!, read, total, next, missing, volumes };
     openSeries.push(os);
     if (next) nextIds.set(next.id, os);
   }
@@ -182,6 +199,7 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
 
   const score = (b: Book): Suggestion | null => {
     const os = nextIds.get(b.id);
+    if (os && b.status === 'abandonado') return { book: b, reason: `Retomar a saga ${os.name} (${os.read} ${os.read === 1 ? 'lido' : 'lidos'})` };
     if (os) return { book: b, reason: `Continua a saga ${os.name} (${os.read} ${os.read === 1 ? 'lido' : 'lidos'})` };
     let best = 0;
     let reason = '';
@@ -215,7 +233,8 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     pace,
     monthsToClear,
     openSeries: openSeries.slice(0, 4),
-    suggestions: rank(unread),
+    // próximos de saga abandonados também entram (retomar a leitura)
+    suggestions: rank([...unread, ...books.filter((b) => b.status === 'abandonado' && nextIds.has(b.id))]),
     wishSuggestions: rank(books.filter((b) => b.status === 'desejo'))
   };
 }

@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
 import { Icon, type IconName } from '../components/Icon';
 import { Cover, Empty } from '../components/ui';
-import { availableYears, legacyBooks, shelfInsights, shelfProgress, yearStats, type Suggestion } from '../lib/stats';
+import { availableYears, legacyBooks, shelfInsights, shelfProgress, yearStats, type OpenSeries, type Suggestion, type VolumeState } from '../lib/stats';
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
 import { useLibrary } from '../store/library';
 
 const GENRE_COLORS = ['#3F5A39', '#A3B18A', '#7A5235', '#E0C49C', '#5E7D8A', '#C4855E'];
+const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 function greeting() {
@@ -22,17 +23,94 @@ function duration(months: number) {
   return `${String(y).replace('.', ',')} ${y === 1 ? 'ano' : 'anos'}`;
 }
 
-const listPos = (ns: number[]) => (ns.length === 1 ? `o livro ${ns[0]}` : `os livros ${ns.slice(0, -1).join(', ')} e ${ns[ns.length - 1]}`);
+const VOL_LABEL: Record<VolumeState, string> = { lido: 'lido', lendo: 'lendo', parado: 'abandonado', estante: 'na estante', falta: 'falta' };
 
-function SuggestionRow({ s, base }: { s: Suggestion; base: string }) {
+function Ring({ pct, label = 'lida', color = 'var(--leaf)' }: { pct: number; label?: string; color?: string }) {
+  const r = 46;
+  const c = 2 * Math.PI * r;
   return (
-    <Link to={`${base}/livro/${s.book.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)', alignItems: 'center' }}>
-      <Cover book={s.book} width={38} />
-      <div className="stack grow" style={{ gap: 2, minWidth: 0 }}>
-        <span className="serif" style={{ fontWeight: 600 }}>{s.book.title}</span>
-        <span className="tiny muted">{s.reason}</span>
+    <div className="ring" role="img" aria-label={`${pct}% ${label}`}>
+      <svg viewBox="0 0 110 110" width="118" height="118">
+        <circle cx="55" cy="55" r={r} fill="none" stroke="var(--tan-2)" strokeWidth="12" />
+        <circle
+          cx="55"
+          cy="55"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${(pct / 100) * c} ${c}`}
+          transform="rotate(-90 55 55)"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      </svg>
+      <div className="ring-label">
+        <b>{pct}%</b>
+        <span>{label}</span>
       </div>
+    </div>
+  );
+}
+
+function Kpi({ icon, value, label, bg, fg }: { icon: IconName; value: string; label: string; bg: string; fg: string }) {
+  return (
+    <div className="kpi" style={{ background: bg }}>
+      <span className="kpi-ico" style={{ color: fg }}>
+        <Icon name={icon} size={18} />
+      </span>
+      <b>{value}</b>
+      <span className="tiny muted">{label}</span>
+    </div>
+  );
+}
+
+function PickCard({ s, base }: { s: Suggestion; base: string }) {
+  const saga = /^(Continua|Retomar) a saga /.test(s.reason);
+  return (
+    <Link to={`${base}/livro/${s.book.id}`} className="pick">
+      <Cover book={s.book} width={80} />
+      <span className="serif pick-t">{s.book.title}</span>
+      <span className={`pick-tag${saga ? ' saga' : ''}`}>
+        <Icon name={saga ? 'readings' : 'heart'} size={12} />
+        <span>{saga ? s.reason.replace(/^Continua a saga /, '') : s.reason}</span>
+      </span>
     </Link>
+  );
+}
+
+function SagaRow({ o, base }: { o: OpenSeries; base: string }) {
+  const missing = o.missing.length;
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row between" style={{ gap: 8 }}>
+        <b className="small">{o.name}</b>
+        <span className="saga-count">
+          {o.read}
+          {o.total ? <span>/{o.total}</span> : <span> lidos</span>}
+        </span>
+      </div>
+      <div className="vol-strip" role="img" aria-label={o.volumes.map((v, i) => `volume ${i + 1}: ${VOL_LABEL[v]}`).join(', ')}>
+        {o.volumes.map((v, i) => (
+          <i key={i} className={v} title={`Vol. ${i + 1} · ${VOL_LABEL[v]}`} />
+        ))}
+      </div>
+      {(o.next || missing > 0) && (
+        <span className="tiny muted">
+          {o.next && (
+            <>
+              Próximo:{' '}
+              <Link to={`${base}/livro/${o.next.id}`} style={{ fontWeight: 700 }}>
+                {o.next.title}
+              </Link>
+              {o.next.status === 'abandonado' && ' (retomar)'}
+            </>
+          )}
+          {o.next && missing > 0 && ' · '}
+          {missing > 0 && (missing <= 3 ? `falta${missing === 1 ? '' : 'm'} vol. ${o.missing.join(', ').replace(/, (\d+)$/, ' e $1')}` : `${missing} volumes faltando`)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -65,7 +143,22 @@ export default function Home() {
   const insights = useMemo(() => shelfInsights(books, readings), [books, readings]);
   const picks = shelfPct.unread > 0 ? insights.suggestions : insights.wishSuggestions;
   const goal = profile?.annual_goal ?? null;
+  const goalInfo = useMemo(() => {
+    if (!goal || year !== thisYear) return null;
+    const now = new Date();
+    const elapsed = now.getMonth() + now.getDate() / new Date(thisYear, now.getMonth() + 1, 0).getDate();
+    const left = Math.max(0, goal - s.books);
+    return {
+      pct: Math.min(100, Math.round((s.books / goal) * 100)),
+      left,
+      perMonth: left / Math.max(0.5, 12 - elapsed),
+      behind: Math.max(0, Math.floor((goal * elapsed) / 12) - s.books)
+    };
+  }, [goal, year, thisYear, s.books]);
   const maxMonth = Math.max(1, ...s.months);
+  const activeMonths = s.months.filter((n) => n > 0).length;
+  const bestMonth = s.months.indexOf(Math.max(...s.months));
+  const monthsSoFar = year === thisYear ? new Date().getMonth() + 1 : 12;
   const genreTotal = s.genres.reduce((a, g) => a + g.n, 0);
   const topGenres = s.genres.slice(0, 5);
   const dateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -116,29 +209,6 @@ export default function Home() {
             </label>
           </div>
 
-          {goal && year === thisYear ? (
-            <div className="card stack" style={{ gap: 10 }}>
-              <div className="row between">
-                <span className="eyebrow">Meta de {year}</span>
-                <span className="small" style={{ fontWeight: 800, color: 'var(--moss)' }}>{Math.min(100, Math.round((s.books / goal) * 100))}%</span>
-              </div>
-              <div className="serif" style={{ fontSize: 24, fontWeight: 600 }}>
-                {s.books} <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink-2)' }}>de {goal} livros</span>
-              </div>
-              <div className="progress" style={{ height: 14 }}>
-                <div style={{ width: `${Math.min(100, (s.books / goal) * 100)}%`, background: 'var(--moss)' }} />
-              </div>
-              <span className="small muted">{s.books >= goal ? 'Meta batida!' : `Faltam ${goal - s.books} livros`}</span>
-            </div>
-          ) : (
-            canEdit &&
-            year === thisYear && (
-              <Link to={`${base}/perfil`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-                <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
-              </Link>
-            )
-          )}
-
           <div className="grid-stats">
             <StatCard icon="book" value={String(s.books)} label="livros lidos" bg="#E3E8D5" fg="#4F6B47" />
             <StatCard icon="pages" value={fmtNum(s.pages)} label="páginas" bg="#F1E4D3" fg="#7A5235" />
@@ -146,77 +216,124 @@ export default function Home() {
             <StatCard icon="readings" value={String(reading.length)} label="lendo agora" bg="#E3E8D5" fg="#4F6B47" />
           </div>
 
+          {!(goal && year === thisYear) && canEdit && year === thisYear && (
+            <Link to={`${base}/perfil`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+              <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
+            </Link>
+          )}
+
+          {(goalInfo || shelfPct.total > 0) && (
+          <div className={`duo${goalInfo && shelfPct.total > 0 ? ' two' : ''}`}>
+            {goalInfo && (
+              <section className="card stack ring-card" style={{ gap: 14 }}>
+                <span className="eyebrow">Meta de {year}</span>
+                <div className="shelf-body">
+                  <Ring pct={goalInfo.pct} label="da meta" color="var(--moss)" />
+                  <div className="kpis">
+                    <Kpi icon="book" value={String(s.books)} label={`de ${goal} livros`} bg="#E3E8D5" fg="#4F6B47" />
+                    <Kpi
+                      icon="flag"
+                      value={goalInfo.left === 0 ? 'Batida!' : String(goalInfo.left)}
+                      label={goalInfo.left === 0 ? 'meta concluída' : goalInfo.left === 1 ? 'livro faltando' : 'livros faltando'}
+                      bg="#F1E4D3"
+                      fg="#7A5235"
+                    />
+                    <Kpi
+                      icon="readings"
+                      value={goalInfo.left === 0 ? `${fmtRating(Math.round(insights.pace * 10) / 10)}` : fmtRating(Math.ceil(goalInfo.perMonth * 10) / 10)}
+                      label={goalInfo.left === 0 ? 'livros por mês' : 'por mês até dezembro'}
+                      bg="#F6E9C9"
+                      fg="#8A5F1A"
+                    />
+                  </div>
+                </div>
+                {goalInfo.left > 0 && (
+                  <span className={`tip${goalInfo.behind > 0 ? ' warn' : ''}`}>
+                    <Icon name={goalInfo.behind > 0 ? 'flag' : 'check'} size={16} />
+                    {goalInfo.behind > 0
+                      ? `${goalInfo.behind} ${goalInfo.behind === 1 ? 'livro' : 'livros'} atrás do ritmo da meta`
+                      : 'Você está no ritmo da meta'}
+                  </span>
+                )}
+              </section>
+            )}
           {shelfPct.total > 0 && (
-            <div className="card stack" style={{ gap: 10 }}>
-              <div className="row between">
-                <span className="eyebrow">Estante lida</span>
-                <span className="small" style={{ fontWeight: 800, color: 'var(--moss)' }}>{shelfPct.pct}%</span>
+            <section className="card stack ring-card" style={{ gap: 14 }}>
+              <span className="eyebrow">Estante lida</span>
+              <div className="shelf-body">
+                <Ring pct={shelfPct.pct} />
+                <div className="kpis">
+                  <Kpi icon="check" value={String(shelfPct.read)} label={`de ${shelfPct.total} lidos`} bg="#E3E8D5" fg="#4F6B47" />
+                  <Kpi icon="book" value={String(shelfPct.unread)} label="esperando leitura" bg="#F1E4D3" fg="#7A5235" />
+                  <Kpi
+                    icon="flag"
+                    value={shelfPct.unread === 0 ? 'Zerou!' : insights.monthsToClear ? duration(insights.monthsToClear) : '—'}
+                    label={
+                      shelfPct.unread === 0
+                        ? 'pilha vazia'
+                        : insights.monthsToClear
+                          ? `pra zerar · ${fmtRating(Math.round(insights.pace * 10) / 10)}/mês`
+                          : `sem leituras em ${thisYear}`
+                    }
+                    bg="#F6E9C9"
+                    fg="#8A5F1A"
+                  />
+                </div>
               </div>
-              <div className="serif" style={{ fontSize: 24, fontWeight: 600 }}>
-                {shelfPct.read} <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink-2)' }}>de {shelfPct.total} livros que você tem</span>
-              </div>
-              <div className="progress" style={{ height: 14 }}>
-                <div style={{ width: `${shelfPct.pct}%`, background: 'var(--leaf)' }} />
-              </div>
-              <span className="small muted">
-                {shelfPct.unread === 0
-                  ? `Todos os livros da estante já foram lidos.${totals.wish ? ` Há ${totals.wish} na lista de desejos.` : ''}`
-                  : `${shelfPct.unread} ${shelfPct.unread === 1 ? 'livro esperando' : 'livros esperando'} leitura. ${
-                      insights.monthsToClear
-                        ? `No ritmo deste ano (${fmtRating(Math.round(insights.pace * 10) / 10)} por mês), dá pra ler ${shelfPct.unread === 1 ? 'ele' : 'todos'} em cerca de ${duration(insights.monthsToClear)}.`
-                        : `Nenhum livro terminado em ${thisYear} ainda.`
-                    }${shelfPct.pct < 50 && shelfPct.unread >= 5 ? ' Vale priorizar a estante antes de novas compras.' : ''}`}
-              </span>
-            </div>
+              {shelfPct.unread === 0 ? (
+                <span className="tip">
+                  <Icon name="check" size={16} /> Todos os livros da estante já foram lidos{totals.wish ? ` · ${totals.wish} na lista de desejos` : ''}
+                </span>
+              ) : (
+                shelfPct.pct < 50 &&
+                shelfPct.unread >= 5 && (
+                  <span className="tip">
+                    <Icon name="leaf" size={16} /> Vale priorizar a estante antes de novas compras
+                  </span>
+                )
+              )}
+            </section>
+          )}
+          </div>
           )}
 
           {(picks.length > 0 || insights.openSeries.length > 0) && (
-            <section className="card stack">
+            <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
               {picks.length > 0 && (
-                <>
+                <div className="stack">
                   <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
-                  <div className="stack" style={{ gap: 12 }}>
+                  <div className="pick-grid">
                     {picks.map((p) => (
-                      <SuggestionRow key={p.book.id} s={p} base={base} />
+                      <PickCard key={p.book.id} s={p} base={base} />
                     ))}
                   </div>
-                </>
+                </div>
               )}
-              {picks.length > 0 && insights.openSeries.length > 0 && <hr className="divider" />}
               {insights.openSeries.length > 0 && (
-                <>
-                  <span className="eyebrow">Sagas em aberto</span>
-                  <div className="stack" style={{ gap: 10 }}>
+                <div className="stack">
+                  <div className="row between wrap" style={{ gap: 8 }}>
+                    <span className="eyebrow">Sagas em aberto</span>
+                    <div className="vol-legend">
+                      {(Object.keys(VOL_LABEL) as VolumeState[]).map((k) => (
+                        <span key={k}>
+                          <i className={k} /> {VOL_LABEL[k]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="stack" style={{ gap: 14 }}>
                     {insights.openSeries.map((o) => (
-                      <div key={o.name} className="stack" style={{ gap: 2 }}>
-                        <span className="small">
-                          <b>{o.name}</b> · {o.read}
-                          {o.total ? ` de ${o.total}` : ''} {o.read === 1 && !o.total ? 'lido' : 'lidos'}
-                        </span>
-                        <span className="tiny muted">
-                          {o.next && (
-                            <>
-                              Próximo:{' '}
-                              <Link to={`${base}/livro/${o.next.id}`} style={{ fontWeight: 700 }}>
-                                {o.next.title}
-                              </Link>
-                              {o.next.status === 'lendo' ? ' (lendo agora)' : ' (já na estante)'}
-                            </>
-                          )}
-                          {o.next && o.missing.length > 0 && ' · '}
-                          {o.missing.length > 0 && `Falta${o.missing.length === 1 ? '' : 'm'} ${listPos(o.missing)}`}
-                        </span>
-                      </div>
+                      <SagaRow key={o.name} o={o} base={base} />
                     ))}
                   </div>
-                </>
+                </div>
               )}
             </section>
           )}
 
           <p className="small muted" style={{ margin: 0 }}>
             Na estante: <b>{totals.shelf}</b> · Lidos no total: <b>{totals.read}</b>
-            {legacy.length > 0 && <> ({legacy.length} sem registro)</>} · Desejos: <b>{totals.wish}</b>
+            {legacy.length > 0 && <> </>} · Desejos: <b>{totals.wish}</b>
           </p>
 
           <div className="home-grid">
@@ -299,17 +416,36 @@ export default function Home() {
               {s.formats.nd > 0 && <span className="tiny muted">{s.formats.nd} sem formato informado</span>}
             </section>
 
-            <section className="card stack">
+            <section className="card stack month-card">
               <h2 style={{ fontSize: 19 }}>Livros por mês</h2>
               <div className="bars" role="img" aria-label={`Livros terminados por mês em ${year}: ${s.months.join(', ')}`}>
                 {s.months.map((n, i) => (
                   <div className="bar" key={i}>
                     {n > 0 && <span style={{ fontSize: 10 }}>{n}</span>}
-                    <i className={n === 0 ? 'zero' : year === thisYear && i === new Date().getMonth() ? 'now' : ''} style={{ height: `${(n / maxMonth) * 72}px` }} />
+                    <i className={n === 0 ? 'zero' : year === thisYear && i === new Date().getMonth() ? 'now' : ''} style={{ height: `calc((100% - 40px) * ${n / maxMonth})` }} />
                     <span>{MONTH_INITIALS[i]}</span>
                   </div>
                 ))}
               </div>
+              {s.books > 0 && (
+                <div className="month-sum">
+                  <div>
+                    <b>{MONTH_NAMES[bestMonth]}</b>
+                    <span className="tiny muted">melhor mês · {s.months[bestMonth]}</span>
+                  </div>
+                  <div>
+                    <b>{fmtRating(Math.round((s.books / monthsSoFar) * 10) / 10)}</b>
+                    <span className="tiny muted">média por mês</span>
+                  </div>
+                  <div>
+                    <b>
+                      {activeMonths}
+                      <small>/{monthsSoFar}</small>
+                    </b>
+                    <span className="tiny muted">meses com leitura</span>
+                  </div>
+                </div>
+              )}
             </section>
 
             {(s.best || s.topAuthors.length > 0 || s.longest) && (

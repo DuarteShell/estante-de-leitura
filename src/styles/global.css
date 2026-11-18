@@ -197,6 +197,55 @@ h3 { font-size: 17px; }
 .fmt-boxes > div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 4px; border-radius: 16px; }
 .fmt-boxes b { font-family: var(--serif); font-size: 21px; font-weight: 600; }
 
+/* estante lida: anel + indicadores */
+.shelf-body { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.ring { position: relative; width: 118px; height: 118px; flex-shrink: 0; }
+.ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-label b { font-family: var(--serif); font-size: 28px; font-weight: 600; line-height: 1; color: var(--moss-d); }
+.ring-label span { font-size: 12px; font-weight: 700; color: var(--bark); }
+.kpis { flex: 1; min-width: 0; display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpi { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 16px; min-width: 0; }
+.kpi-ico { margin-bottom: 4px; }
+.kpi b { font-family: var(--serif); font-size: 24px; font-weight: 600; line-height: 1.1; color: var(--ink); white-space: nowrap; }
+/* o conteúdo se adapta à largura do próprio card */
+.ring-card { container-type: inline-size; }
+@container (min-width: 400px) and (max-width: 640px) {
+  .kpis { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .kpi { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; column-gap: 10px; padding: 8px 12px; }
+  .kpi-ico { margin: 0; align-self: center; }
+  .kpi b { font-size: 20px; }
+}
+@container (max-width: 399px) { .shelf-body { justify-content: center; } .kpis { flex-basis: 100%; } .kpi { padding: 10px; } .kpi b { font-size: 20px; } }
+@container (min-width: 641px) { .kpis { max-width: 640px; } }
+.duo { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { .duo.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tip.warn { background: #f6e9c9; color: #8a5f1a; }
+.tip { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 6px 12px; border-radius: 999px; background: var(--sage-l); color: var(--moss-d); font-size: 13px; font-weight: 700; }
+
+/* sugestões + sagas */
+.insights-grid { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .insights-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .insights-grid.two > :last-child { border-left: 1px solid var(--line); padding-left: 22px; } }
+.pick-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pick { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); min-width: 0; }
+.pick .cover { transition: transform 0.2s ease; }
+.pick:hover .cover { transform: translateY(-3px); }
+.pick-t { font-weight: 600; font-size: 15px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pick-tag { display: inline-flex; align-items: flex-start; gap: 4px; align-self: flex-start; padding: 3px 8px; border-radius: 10px; background: var(--tan); color: var(--bark); font-size: 11px; font-weight: 700; line-height: 1.3; }
+.pick-tag svg { flex-shrink: 0; margin-top: 1px; }
+.pick-tag.saga { background: var(--sage-l); color: var(--moss-d); }
+.saga-count { font-family: var(--serif); font-weight: 600; font-size: 16px; color: var(--moss-d); }
+.saga-count span { font-size: 13px; color: var(--ink-2); }
+.vol-strip { display: flex; gap: 3px; }
+.vol-strip i, .vol-legend i { flex: 1; height: 12px; border-radius: 4px; max-width: 40px; }
+.vol-strip i.lido, .vol-legend i.lido { background: var(--moss); }
+.vol-strip i.lendo, .vol-legend i.lendo { background: var(--gold); }
+.vol-strip i.estante, .vol-legend i.estante { background: var(--sage); }
+.vol-strip i.parado, .vol-legend i.parado { background: repeating-linear-gradient(135deg, var(--wood-l) 0 3px, var(--tan-2) 3px 6px); }
+.vol-strip i.falta, .vol-legend i.falta { background: transparent; border: 1.5px dashed var(--line-2); }
+.vol-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--ink-2); }
+.vol-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.vol-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
 /* ---------------- livros ---------------- */
 .cover {
   position: relative; flex-shrink: 0; border-radius: 4px 9px 9px 4px; overflow: hidden;
@@ -351,3 +400,21 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--moss); }
 .cover-grid a.drop-after::before { right: -9px; }
 .drag-ghost { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); opacity: 0.92; transform: rotate(-3deg) scale(1.05); box-shadow: 0 14px 28px rgba(60, 38, 20, 0.35); animation: none !important; cursor: grabbing; }
 body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+
+/* livros por mês: barras crescem com o card e resumo embaixo */
+.month-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
+.month-sum > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--tan); min-width: 0; }
+.month-sum b { font-family: var(--serif); font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-sum small { font-size: 13px; color: var(--ink-2); }
+
+@media (min-width: 1000px) {
+  /* números do ano: ícone ao lado, card mais baixo */
+  .stat { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; row-gap: 2px; align-items: center; padding: 14px 18px; }
+  .stat .ico { grid-row: span 2; width: 44px; height: 44px; }
+  .stat .num { align-self: end; }
+  .stat > :last-child { align-self: start; }
+  .month-card .bars { height: 170px; }
+  /* sugestões: capas maiores ocupando a coluna */
+  .pick .cover { width: 100% !important; max-width: 130px; height: auto !important; aspect-ratio: 2 / 3; }
+  .insights-grid { align-items: start; }
+}
