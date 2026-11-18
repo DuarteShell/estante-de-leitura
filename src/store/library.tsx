@@ -53,6 +53,36 @@ interface Ctx extends LibraryData {
 
 const LibraryContext = createContext<Ctx | null>(null);
 
+/**
+ * Cópia local da própria estante: quando o celular descarta o app em segundo plano,
+ * ao voltar a estante aparece na hora e é atualizada em silêncio.
+ */
+const CACHE_PREFIX = 'estante:cache:v1:';
+function readCache(username: string): LibraryData | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + username);
+    return raw ? (JSON.parse(raw) as LibraryData) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCache(username: string, data: LibraryData) {
+  try {
+    localStorage.setItem(CACHE_PREFIX + username, JSON.stringify(data));
+  } catch {
+    /* sem espaço ou armazenamento bloqueado: segue sem cache */
+  }
+}
+function clearCache() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(CACHE_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
+}
+
 export const makeBook = (b: NewBook): Book => ({
   id: uid(),
   isbn: null,
@@ -99,7 +129,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   dataRef.current = data;
   const viewingRef = useRef(viewing);
   viewingRef.current = viewing;
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
   const loadSeq = useRef(0);
+  /** conta alterações locais, para uma recarga silenciosa não sobrescrever uma edição feita no meio */
+  const editSeq = useRef(0);
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -120,13 +156,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const load = useCallback(async (username: string) => {
+  /** silent: mantém a estante na tela enquanto busca a versão atualizada */
+  const load = useCallback(async (username: string, silent = false) => {
     const seq = ++loadSeq.current;
-    setStatus('loading');
-    setError(null);
+    const edits = editSeq.current;
+    if (!silent) {
+      setStatus('loading');
+      setError(null);
+    }
     try {
       const lib = await backend.loadLibrary(username);
       if (seq !== loadSeq.current) return;
+      if (silent && edits !== editSeq.current) {
+        // houve edição durante a busca: busca de novo para não perder o que acabou de mudar
+        void load(username, true);
+        return;
+      }
       if (!lib) {
         setData(empty);
         setStatus('missing');
@@ -136,6 +181,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       if (seq !== loadSeq.current) return;
+      if (silent) return; // sem rede ao voltar: continua mostrando o que já está na tela
       setError(e instanceof Error ? e.message : 'Erro ao carregar');
       setStatus('error');
     }
@@ -148,14 +194,22 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       if (u === viewingRef.current) return;
       viewingRef.current = u;
       setViewing(u);
-      load(u);
+      const cached = readCache(u);
+      if (cached?.profile && cached.profile.id === userIdRef.current) {
+        setData(cached);
+        setError(null);
+        setStatus('ready');
+        load(u, true);
+      } else {
+        load(u);
+      }
     },
     [load]
   );
 
   const reload = useCallback(async () => {
     await refreshAuth();
-    if (viewingRef.current) await load(viewingRef.current);
+    if (viewingRef.current) await load(viewingRef.current, statusRef.current === 'ready');
   }, [refreshAuth, load]);
 
   useEffect(() => {
@@ -167,7 +221,17 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const canEdit = !!userId && status === 'ready' && data.profile?.id === userId;
 
-  const patchState = (fn: (d: LibraryData) => LibraryData) => setData((d) => fn(d));
+  const patchState = (fn: (d: LibraryData) => LibraryData) => {
+    editSeq.current++;
+    setData((d) => fn(d));
+  };
+
+  // mantém a cópia local da própria estante em dia
+  useEffect(() => {
+    if (!canEdit || !data.profile) return;
+    const t = window.setTimeout(() => writeCache(data.profile!.username.toLowerCase(), data), 400);
+    return () => window.clearTimeout(t);
+  }, [canEdit, data]);
 
   /**
    * Padroniza maiúsculas de títulos e autores já cadastrados (antes da regra existir).
@@ -256,6 +320,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       signOut: () =>
         run(async () => {
           await backend.signOut();
+          clearCache();
           await reload();
         }),
       saveProfile: (p) =>

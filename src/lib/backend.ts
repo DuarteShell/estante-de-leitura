@@ -84,8 +84,19 @@ class SupabaseBackend implements Backend {
   }
 
   onAuthChange(cb: () => void) {
-    const { data } = this.sb.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') setTimeout(cb, 0);
+    // O Supabase reemite SIGNED_IN sempre que a aba volta a ficar visível (revalida a sessão).
+    // Só avisamos quando o usuário logado realmente muda — senão a estante recarregaria à toa.
+    let lastUser: string | null | undefined;
+    const { data } = this.sb.auth.onAuthStateChange((event, session) => {
+      const id = session?.user.id ?? null;
+      if (event === 'INITIAL_SESSION') {
+        lastUser = id;
+        return;
+      }
+      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') return;
+      if (id === lastUser) return;
+      lastUser = id;
+      setTimeout(cb, 0);
     });
     return () => data.subscription.unsubscribe();
   }
