@@ -188,7 +188,7 @@ export default function AddBook() {
               submitLabel={startStatus === 'desejo' ? 'Salvar nos desejos' : 'Colocar na estante'}
               onSubmit={async ({ book, reading }) => {
                 const id = await addBook(book, reading);
-                notify(book.status === 'desejo' ? 'Adicionado à lista de desejos 💚' : 'Livro na estante! 📚');
+                notify(book.status === 'desejo' ? 'Adicionado à lista de desejos' : 'Livro na estante!');
                 nav(`${base}/livro/${id}`, { replace: true });
               }}
             />

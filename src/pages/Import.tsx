@@ -141,7 +141,7 @@ export default function Import() {
     setProgress('Salvando na estante…');
     try {
       await lib.importBatch(books, readings);
-      lib.notify(`${books.length} livros e ${readings.length} leituras importados 📚`);
+      lib.notify(`${books.length} livros e ${readings.length} leituras importados`);
       nav(`${base}/estante`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao importar');

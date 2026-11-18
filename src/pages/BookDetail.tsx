@@ -344,7 +344,7 @@ export default function BookDetail() {
 
       {dialog?.kind === 'finish' && (
         <ReadingModal
-          title={dialog.status === 'lido' ? 'Terminei! 🌿' : 'Abandonar leitura'}
+          title={dialog.status === 'lido' ? 'Terminei!' : 'Abandonar leitura'}
           initial={{ ...active, id: undefined, status: dialog.status, finished_at: undefined, pages_read: dialog.status === 'abandonado' ? book.current_page : null }}
           allowStatus={false}
           saveLabel={dialog.status === 'lido' ? 'Salvar leitura' : 'Marcar como abandonado'}

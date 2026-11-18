@@ -141,3 +141,80 @@ export function groupSeries(list: Book[]): Book[] {
   }
   return out;
 }
+
+/* ---------- Títulos e autores ---------- */
+
+/** artigos, preposições e conjunções que ficam minúsculos no meio do título */
+const TITLE_MINOR = new Set([
+  'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas',
+  'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas',
+  'ao', 'aos', 'à', 'às', 'num', 'numa', 'por', 'pelo', 'pela', 'pelos', 'pelas',
+  'para', 'pra', 'com', 'sem', 'sob', 'e', 'ou', 'nem', 'que',
+  'y', 'del', 'la', 'las', 'el', 'los',
+  'of', 'the', 'and', 'an', 'in', 'on', 'to', 'for', 'at', 'by', 'or', 'with', 'from'
+]);
+const ROMAN = /^(?=[ivxlc]+$)c{0,3}(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$/;
+
+/** palavras que casam com algarismo romano mas são palavras comuns */
+const NOT_ROMAN = new Set(['li', 'di', 'mix', 'civil', 'vi', 'c', 'l', 'd']);
+
+/** partículas de sobrenome que ficam minúsculas no meio do nome */
+const NAME_MINOR = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'y', 'del', 'della', 'di', 'du', 'van', 'von', 'der', 'den', 'ten', 'ter']);
+
+const upFirst = (w: string) => w.charAt(0).toLocaleUpperCase('pt-BR') + w.slice(1);
+
+interface CaseRules {
+  minor: Set<string>;
+  roman: boolean;
+  /** letras depois destes separadores também sobem (pós-guerra, j.r.r., o'brien) */
+  inner: RegExp;
+  /** pontuação no fim de uma palavra que faz a próxima ser "começo" */
+  restart: RegExp;
+}
+
+function smartCase(raw: string, rules: CaseRules): string {
+  const s = raw.replace(/\s+/g, ' ').trim();
+  if (!s) return s;
+  const allCaps = s === s.toLocaleUpperCase('pt-BR') && /\p{L}{2}/u.test(s);
+  let start = true;
+  return s
+    .split(' ')
+    .map((token) => {
+      const [, pre, core, post] = token.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u)!;
+      if (!core) {
+        if (rules.restart.test(token) || /^[—–-]+$/.test(token)) start = true;
+        return token;
+      }
+      const first = start || /[(\["“'«]/.test(pre);
+      const lower = core.toLocaleLowerCase('pt-BR');
+      let out: string;
+      if (rules.roman && ROMAN.test(lower) && !NOT_ROMAN.has(lower)) out = lower.toLocaleUpperCase('pt-BR');
+      else if (!first && rules.minor.has(lower)) out = lower;
+      else if (allCaps || core === lower || (core.length > 3 && core === core.toLocaleUpperCase('pt-BR')))
+        out = upFirst(lower.replace(rules.inner, (m) => m.toLocaleUpperCase('pt-BR')));
+      else out = core; // já tem maiúsculas (McEwan, iPhone, FBI): respeita
+      start = rules.restart.test(post);
+      return pre + out + post;
+    })
+    .join(' ');
+}
+
+const TITLE_RULES: CaseRules = { minor: TITLE_MINOR, roman: true, inner: /(?<=-)\p{L}/gu, restart: /[:.!?—–]$/ };
+const NAME_RULES: CaseRules = { minor: NAME_MINOR, roman: false, inner: /(?<=[-.'’])\p{L}/gu, restart: /[,;&]$/ };
+
+/**
+ * "o nome do vento" → "O Nome do Vento". Conectores ficam minúsculos no meio
+ * (mas não no começo nem depois de ":", "—", "." etc.). Palavras com maiúsculas
+ * no meio (iPhone, McEwan) e siglas curtas (FBI) são mantidas.
+ */
+export const titleCase = (raw: string) => smartCase(raw, TITLE_RULES);
+
+/** "machado de assis" → "Machado de Assis"; "j.r.r. tolkien" → "J.R.R. Tolkien" */
+export const nameCase = (raw: string) => smartCase(raw, NAME_RULES);
+
+/** título/autor padronizados; null quando o livro já está certo */
+export function normalizeBookNames(b: Pick<Book, 'title' | 'author'>): Pick<Book, 'title' | 'author'> | null {
+  const title = titleCase(b.title);
+  const author = b.author ? nameCase(b.author) || null : b.author;
+  return title !== b.title || author !== b.author ? { title, author } : null;
+}

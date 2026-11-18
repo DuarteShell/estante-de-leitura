@@ -80,7 +80,7 @@ export default function Profile() {
               annual_goal: goal ? Number(goal) : null,
               is_public: isPublic
             });
-            lib.notify('Perfil salvo 🌿');
+            lib.notify('Perfil salvo');
           } finally {
             setSaving(false);
           }
@@ -132,7 +132,7 @@ export default function Profile() {
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(shareUrl);
-                  lib.notify('Link copiado 📋');
+                  lib.notify('Link copiado');
                 } catch {
                   lib.notify('Selecione e copie o link');
                 }
@@ -153,7 +153,7 @@ export default function Profile() {
             await lib.changePin(newPin);
             setNewPin('');
             setNewPin2('');
-            lib.notify('PIN alterado 🔒');
+            lib.notify('PIN alterado');
           }}
         >
           <h2 style={{ fontSize: 19 }}>Trocar PIN</h2>

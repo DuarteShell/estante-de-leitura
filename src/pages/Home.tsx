@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
 import { Icon, type IconName } from '../components/Icon';
 import { Cover, Empty } from '../components/ui';
-import { availableYears, legacyBooks, shelfProgress, yearStats } from '../lib/stats';
+import { availableYears, legacyBooks, shelfInsights, shelfProgress, yearStats, type Suggestion } from '../lib/stats';
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
 import { useLibrary } from '../store/library';
@@ -14,6 +14,26 @@ const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', '
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+}
+
+function duration(months: number) {
+  if (months < 12) return `${months} ${months === 1 ? 'mês' : 'meses'}`;
+  const y = Math.round((months / 12) * 2) / 2;
+  return `${String(y).replace('.', ',')} ${y === 1 ? 'ano' : 'anos'}`;
+}
+
+const listPos = (ns: number[]) => (ns.length === 1 ? `o livro ${ns[0]}` : `os livros ${ns.slice(0, -1).join(', ')} e ${ns[ns.length - 1]}`);
+
+function SuggestionRow({ s, base }: { s: Suggestion; base: string }) {
+  return (
+    <Link to={`${base}/livro/${s.book.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)', alignItems: 'center' }}>
+      <Cover book={s.book} width={38} />
+      <div className="stack grow" style={{ gap: 2, minWidth: 0 }}>
+        <span className="serif" style={{ fontWeight: 600 }}>{s.book.title}</span>
+        <span className="tiny muted">{s.reason}</span>
+      </div>
+    </Link>
+  );
 }
 
 function StatCard({ icon, value, label, bg, fg }: { icon: IconName; value: string; label: string; bg: string; fg: string }) {
@@ -42,6 +62,8 @@ export default function Home() {
     wish: books.filter((b) => b.status === 'desejo').length
   };
   const shelfPct = useMemo(() => shelfProgress(books), [books]);
+  const insights = useMemo(() => shelfInsights(books, readings), [books, readings]);
+  const picks = shelfPct.unread > 0 ? insights.suggestions : insights.wishSuggestions;
   const goal = profile?.annual_goal ?? null;
   const maxMonth = Math.max(1, ...s.months);
   const genreTotal = s.genres.reduce((a, g) => a + g.n, 0);
@@ -106,7 +128,7 @@ export default function Home() {
               <div className="progress" style={{ height: 14 }}>
                 <div style={{ width: `${Math.min(100, (s.books / goal) * 100)}%`, background: 'var(--moss)' }} />
               </div>
-              <span className="small muted">{s.books >= goal ? 'Meta batida! 🌱' : `Faltam ${goal - s.books} livros`}</span>
+              <span className="small muted">{s.books >= goal ? 'Meta batida!' : `Faltam ${goal - s.books} livros`}</span>
             </div>
           ) : (
             canEdit &&
@@ -138,10 +160,58 @@ export default function Home() {
               </div>
               <span className="small muted">
                 {shelfPct.unread === 0
-                  ? 'Nenhum livro esperando na estante. Pode comprar sem culpa! 🌱'
-                  : `${shelfPct.unread} ${shelfPct.unread === 1 ? 'livro esperando' : 'livros esperando'} para ser lido${shelfPct.unread === 1 ? '' : 's'}${shelfPct.pct < 50 ? ' — talvez segurar as compras um pouquinho 😉' : ''}`}
+                  ? `Todos os livros da estante já foram lidos.${totals.wish ? ` Há ${totals.wish} na lista de desejos.` : ''}`
+                  : `${shelfPct.unread} ${shelfPct.unread === 1 ? 'livro esperando' : 'livros esperando'} leitura. ${
+                      insights.monthsToClear
+                        ? `No ritmo deste ano (${fmtRating(Math.round(insights.pace * 10) / 10)} por mês), dá pra ler ${shelfPct.unread === 1 ? 'ele' : 'todos'} em cerca de ${duration(insights.monthsToClear)}.`
+                        : `Nenhum livro terminado em ${thisYear} ainda.`
+                    }${shelfPct.pct < 50 && shelfPct.unread >= 5 ? ' Vale priorizar a estante antes de novas compras.' : ''}`}
               </span>
             </div>
+          )}
+
+          {(picks.length > 0 || insights.openSeries.length > 0) && (
+            <section className="card stack">
+              {picks.length > 0 && (
+                <>
+                  <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
+                  <div className="stack" style={{ gap: 12 }}>
+                    {picks.map((p) => (
+                      <SuggestionRow key={p.book.id} s={p} base={base} />
+                    ))}
+                  </div>
+                </>
+              )}
+              {picks.length > 0 && insights.openSeries.length > 0 && <hr className="divider" />}
+              {insights.openSeries.length > 0 && (
+                <>
+                  <span className="eyebrow">Sagas em aberto</span>
+                  <div className="stack" style={{ gap: 10 }}>
+                    {insights.openSeries.map((o) => (
+                      <div key={o.name} className="stack" style={{ gap: 2 }}>
+                        <span className="small">
+                          <b>{o.name}</b> · {o.read}
+                          {o.total ? ` de ${o.total}` : ''} {o.read === 1 && !o.total ? 'lido' : 'lidos'}
+                        </span>
+                        <span className="tiny muted">
+                          {o.next && (
+                            <>
+                              Próximo:{' '}
+                              <Link to={`${base}/livro/${o.next.id}`} style={{ fontWeight: 700 }}>
+                                {o.next.title}
+                              </Link>
+                              {o.next.status === 'lendo' ? ' (lendo agora)' : ' (já na estante)'}
+                            </>
+                          )}
+                          {o.next && o.missing.length > 0 && ' · '}
+                          {o.missing.length > 0 && `Falta${o.missing.length === 1 ? '' : 'm'} ${listPos(o.missing)}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
           )}
 
           <p className="small muted" style={{ margin: 0 }}>

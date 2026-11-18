@@ -68,7 +68,7 @@ export default function SignUp() {
           setError(null);
           try {
             await signUp(username, name.trim() || username, pin);
-            notify('Estante criada! 🌱 Que tal importar suas leituras?');
+            notify('Estante criada! Que tal importar suas leituras?');
             nav(`/u/${username}`, { replace: true });
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Não foi possível criar a conta');

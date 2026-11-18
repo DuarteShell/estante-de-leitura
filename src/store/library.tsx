@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { backend, type PublicShelf } from '../lib/backend';
 import type { Book, BookStatus, LibraryData, Profile, Quote, Reading } from '../lib/types';
-import { nowIso, todayIso, uid } from '../lib/util';
+import { nameCase, normalizeBookNames, nowIso, titleCase, todayIso, uid } from '../lib/util';
 
 type NewBook = Partial<Book> & { title: string };
 type NewReading = Partial<Reading>;
@@ -55,7 +55,6 @@ const LibraryContext = createContext<Ctx | null>(null);
 
 export const makeBook = (b: NewBook): Book => ({
   id: uid(),
-  author: null,
   isbn: null,
   cover_url: null,
   genres: [],
@@ -65,7 +64,9 @@ export const makeBook = (b: NewBook): Book => ({
   current_page: null,
   notes: null,
   created_at: nowIso(),
-  ...b
+  ...b,
+  title: titleCase(b.title),
+  author: b.author ? nameCase(b.author) || null : null
 });
 
 export const makeReading = (bookId: string, r: NewReading): Reading => ({
@@ -168,6 +169,28 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const patchState = (fn: (d: LibraryData) => LibraryData) => setData((d) => fn(d));
 
+  /**
+   * Padroniza maiúsculas de títulos e autores já cadastrados (antes da regra existir).
+   * Roda uma vez por carga da própria estante e só toca nos livros que mudam.
+   */
+  const normalizedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const pid = data.profile?.id;
+    if (!canEdit || !pid || normalizedFor.current === pid) return;
+    normalizedFor.current = pid;
+    const fixes = data.books.map((b) => ({ id: b.id, patch: normalizeBookNames(b) })).filter((f): f is { id: string; patch: Pick<Book, 'title' | 'author'> } => !!f.patch);
+    if (!fixes.length) return;
+    (async () => {
+      const done = new Map<string, Pick<Book, 'title' | 'author'>>();
+      for (let i = 0; i < fixes.length; i += 10) {
+        const chunk = fixes.slice(i, i + 10);
+        const res = await Promise.allSettled(chunk.map((f) => backend.updateBook(f.id, f.patch)));
+        res.forEach((r, k) => r.status === 'fulfilled' && done.set(chunk[k].id, chunk[k].patch));
+      }
+      if (done.size) patchState((d) => ({ ...d, books: d.books.map((b) => (done.has(b.id) ? { ...b, ...done.get(b.id) } : b)) }));
+    })();
+  }, [canEdit, data.profile?.id, data.books]);
+
   const run = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T> => {
       try {
@@ -183,6 +206,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const updateBook = useCallback(
     (id: string, patch: Partial<Book>) =>
       run(async () => {
+        if (patch.title != null) patch = { ...patch, title: titleCase(patch.title) };
+        if (patch.author) patch = { ...patch, author: nameCase(patch.author) || null };
         await backend.updateBook(id, patch);
         patchState((d) => ({ ...d, books: d.books.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
       }),
