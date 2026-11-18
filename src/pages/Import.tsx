@@ -16,7 +16,7 @@ import {
   type ParsedFile,
   type SourceId
 } from '../lib/importers';
-import { findCover } from '../lib/isbn';
+import { findBestCover, findCover } from '../lib/isbn';
 import type { Book, BookStatus, Reading, ReadingFormat } from '../lib/types';
 import { STATUS_LABEL } from '../lib/types';
 import { bookKey, nowIso } from '../lib/util';
@@ -125,11 +125,13 @@ export default function Import() {
       const worker = async () => {
         while (queue.length) {
           const b = queue.shift()!;
-          const found = await findCover(b.title, b.author);
-          if (found) {
-            b.cover_url = found.cover_url;
-            if (!b.genres.length) b.genres = found.genres;
-            b.pages ??= found.pages;
+          b.cover_url = await findBestCover({ isbn: b.isbn, title: b.title, author: b.author });
+          if (!b.genres.length || b.pages == null) {
+            const found = await findCover(b.title, b.author);
+            if (found) {
+              if (!b.genres.length) b.genres = found.genres;
+              b.pages ??= found.pages;
+            }
           }
           done += 1;
           setProgress(`Buscando capas e gêneros… ${done}/${missing.length}`);

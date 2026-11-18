@@ -155,7 +155,7 @@ async function openLibrary(isbn: string): Promise<FoundBook | null> {
   };
 }
 
-/** Junta as fontes: a primeira que achar define título/autor; as outras completam capa, páginas e gêneros. */
+/** Junta as fontes: a primeira que achar define título/autor; as outras completam páginas e gêneros. A capa passa por findBestCover. */
 export async function lookupIsbn(raw: string): Promise<FoundBook | null> {
   const isbn = cleanIsbn(raw);
   const [a, b, c] = await Promise.all([brasilApi(isbn), googleIsbn(isbn), openLibrary(isbn)]);
@@ -163,12 +163,102 @@ export async function lookupIsbn(raw: string): Promise<FoundBook | null> {
   if (!all.length) return null;
   const base = { ...all[0] };
   for (const x of all.slice(1)) {
-    base.cover_url ??= x.cover_url;
     base.pages ??= x.pages;
     base.author ??= x.author;
     if (!base.genres.length) base.genres = x.genres;
   }
+  base.cover_url = await findBestCover({
+    isbn,
+    title: base.title,
+    author: base.author,
+    candidates: all.map((x) => x.cover_url)
+  });
   return base;
+}
+
+/* ---------------- Capas ---------------- */
+
+export function isbn13to10(s: string): string | null {
+  if (!/^978\d{10}$/.test(s)) return null;
+  const core = s.slice(3, 12);
+  const sum = core.split('').reduce((acc, d, i) => acc + Number(d) * (10 - i), 0);
+  const check = (11 - (sum % 11)) % 11;
+  return core + (check === 10 ? 'X' : String(check));
+}
+
+export function isbn10to13(s: string): string | null {
+  if (!/^\d{9}[\dX]$/.test(s)) return null;
+  const core = '978' + s.slice(0, 9);
+  const sum = core.split('').reduce((acc, d, i) => acc + Number(d) * (i % 2 ? 3 : 1), 0);
+  return core + String((10 - (sum % 10)) % 10);
+}
+
+/** Testa se a imagem carrega de verdade e não é um "pixel vazio" (Amazon devolve 1x1 quando não tem capa). */
+function imageWorks(url: string, timeoutMs = 7000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.referrerPolicy = 'no-referrer';
+    const timer = setTimeout(() => {
+      img.src = '';
+      resolve(false);
+    }, timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img.naturalWidth >= 40 && img.naturalHeight >= 40);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    img.src = url;
+  });
+}
+
+/** Primeira URL da lista (em ordem de preferência) cuja imagem carrega. Testa todas em paralelo. */
+async function firstWorking(urls: (string | null | undefined)[]): Promise<string | null> {
+  const list = [...new Set(urls.filter(Boolean) as string[])];
+  const ok = await Promise.all(list.map((u) => imageWorks(u)));
+  return list[ok.indexOf(true)] ?? null;
+}
+
+/**
+ * Procura uma capa que funcione, tentando em ordem:
+ * 1. links devolvidos pelas APIs (BrasilAPI, Google, Open Library) — validados, porque às vezes vêm quebrados
+ * 2. Open Library Covers direto pelo ISBN (13 e 10)
+ * 3. Amazon pelo ISBN-10 (cobre muita edição brasileira)
+ * 4. busca no Google Books por título + autor (pode ser outra edição, mas é melhor que nada)
+ */
+export async function findBestCover({
+  isbn,
+  title,
+  author,
+  candidates = []
+}: {
+  isbn?: string | null;
+  title?: string | null;
+  author?: string | null;
+  candidates?: (string | null | undefined)[];
+}): Promise<string | null> {
+  const clean = isbn ? cleanIsbn(isbn) : '';
+  const i13 = clean.length === 13 ? clean : clean.length === 10 ? isbn10to13(clean) : null;
+  const i10 = clean.length === 10 ? clean : clean.length === 13 ? isbn13to10(clean) : null;
+
+  const byIsbn: string[] = [];
+  if (i13) byIsbn.push(`https://covers.openlibrary.org/b/isbn/${i13}-L.jpg?default=false`);
+  if (i10) {
+    byIsbn.push(`https://covers.openlibrary.org/b/isbn/${i10}-L.jpg?default=false`);
+    byIsbn.push(`https://images-na.ssl-images-amazon.com/images/P/${i10}.01.LZZZZZZZ.jpg`);
+  }
+
+  const hit = await firstWorking([...candidates.map(https), ...byIsbn]);
+  if (hit) return hit;
+
+  if (title?.trim()) {
+    const q = `intitle:${title}${author ? ` inauthor:${author.split(',')[0]}` : ''}`;
+    const res = await searchBooks(q);
+    return firstWorking(res.map((r) => r.cover_url).slice(0, 5));
+  }
+  return null;
 }
 
 export async function searchBooks(q: string): Promise<FoundBook[]> {

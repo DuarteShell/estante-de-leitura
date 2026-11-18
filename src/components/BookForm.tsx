@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { findBestCover } from '../lib/isbn';
 import type { Book, BookStatus, Reading } from '../lib/types';
 import { useLibrary } from '../store/library';
 import { todayIso } from '../lib/util';
@@ -44,6 +45,23 @@ export function BookForm({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [coverSearch, setCoverSearch] = useState<'idle' | 'busy' | 'none'>('idle');
+
+  const searchCover = async () => {
+    if (!isbn.trim() && !title.trim()) return;
+    setCoverSearch('busy');
+    const url = await findBestCover({ isbn, title, author: author || null });
+    if (url) {
+      setCover(url);
+      setCoverSearch('idle');
+    } else setCoverSearch('none');
+  };
+
+  // Livro novo sem capa: tenta achar sozinho uma vez
+  useEffect(() => {
+    if (mode === 'create' && !initial?.cover_url && (initial?.isbn || initial?.title)) searchCover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const genreSuggestions = useMemo(() => {
     const used = new Map<string, number>();
@@ -141,6 +159,11 @@ export function BookForm({
           <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
             <Icon name="camera" size={16} /> {uploading ? 'Enviando…' : 'Foto'}
           </button>
+          {!cover && (
+            <button type="button" className="btn btn-sm" onClick={searchCover} disabled={coverSearch === 'busy' || (!isbn.trim() && !title.trim())}>
+              {coverSearch === 'busy' ? 'Buscando…' : coverSearch === 'none' ? 'Sem capa :(' : 'Achar capa'}
+            </button>
+          )}
         </div>
         <div className="stack grow">
           <label className="field">
