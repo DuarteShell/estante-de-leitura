@@ -155,6 +155,41 @@ async function openLibrary(isbn: string): Promise<FoundBook | null> {
   };
 }
 
+const normName = (n: string) =>
+  n
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+/** Mesmo nome se o sobrenome bate e o primeiro nome bate (ou é abreviado: "B. Garmus"). */
+function sameAuthor(x: string, y: string) {
+  const a = normName(x);
+  const b = normName(y);
+  if (!a.length || !b.length || a[a.length - 1] !== b[b.length - 1]) return false;
+  return a[0] === b[0] || a[0][0] === b[0][0];
+}
+
+/**
+ * A BrasilAPI (dados da CBL) costuma listar tradutor/ilustrador junto com o autor
+ * ("Bonnie Garmus, Maria Carmelita Dias"). Se o Google/Open Library tiverem o livro,
+ * mantém só os nomes que eles confirmam; se não tiverem, fica só o primeiro nome
+ * (o autor vem antes do tradutor).
+ */
+function pickAuthors(brasil: string | null, others: (string | null)[]): string | null {
+  if (!brasil) return null;
+  const names = brasil.split(',').map((n) => n.trim()).filter(Boolean);
+  if (names.length <= 1) return brasil;
+  const ref = others.flatMap((o) => (o ? o.split(',').map((n) => n.trim()) : []));
+  if (ref.length) {
+    const confirmed = names.filter((n) => ref.some((r) => sameAuthor(n, r)));
+    return confirmed.length ? confirmed.join(', ') : names[0];
+  }
+  return names[0];
+}
+
 /** Junta as fontes: a primeira que achar define título/autor; as outras completam páginas e gêneros. A capa passa por findBestCover. */
 export async function lookupIsbn(raw: string): Promise<FoundBook | null> {
   const isbn = cleanIsbn(raw);
@@ -167,6 +202,7 @@ export async function lookupIsbn(raw: string): Promise<FoundBook | null> {
     base.author ??= x.author;
     if (!base.genres.length) base.genres = x.genres;
   }
+  base.author = pickAuthors(a?.author ?? null, [b?.author ?? null, c?.author ?? null]) ?? base.author;
   base.cover_url = await findBestCover({
     isbn,
     title: base.title,
