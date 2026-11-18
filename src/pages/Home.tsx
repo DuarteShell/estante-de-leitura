@@ -450,42 +450,51 @@ export default function Home() {
 
             {(s.best || s.topAuthors.length > 0 || s.longest) && (
               <section className="card stack span-2">
-                <h2 style={{ fontSize: 19 }}>Destaques de {year}</h2>
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                <div className="row between wrap" style={{ gap: 8 }}>
+                  <h2 style={{ fontSize: 19 }}>Destaques de {year}</h2>
+                  {s.abandoned > 0 && (
+                    <span className="pick-tag">
+                      {s.abandoned} {s.abandoned === 1 ? 'abandonado' : 'abandonados'} · tudo bem!
+                    </span>
+                  )}
+                </div>
+                <div className="hl-grid">
                   {s.best && (
-                    <Link to={`${base}/livro/${s.best.book.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-                      <Cover book={s.best.book} width={44} />
-                      <div className="stack" style={{ gap: 2 }}>
+                    <Link to={`${base}/livro/${s.best.book.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F6E9C9' }}>
+                      <Cover book={s.best.book} width={48} />
+                      <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                         <span className="eyebrow">Melhor nota</span>
-                        <span className="serif" style={{ fontWeight: 600 }}>{s.best.book.title}</span>
+                        <span className="serif hl-t">{s.best.book.title}</span>
                         <span className="tiny muted">{fmtRating(s.best.rating)} estrelas</span>
                       </div>
                     </Link>
                   )}
                   {s.longest && (
-                    <Link to={`${base}/livro/${s.longest.id}`} className="row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-                      <Cover book={s.longest} width={44} />
-                      <div className="stack" style={{ gap: 2 }}>
+                    <Link to={`${base}/livro/${s.longest.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F1E4D3' }}>
+                      <Cover book={s.longest} width={48} />
+                      <div className="stack" style={{ gap: 2, minWidth: 0 }}>
                         <span className="eyebrow">Mais longo</span>
-                        <span className="serif" style={{ fontWeight: 600 }}>{s.longest.title}</span>
+                        <span className="serif hl-t">{s.longest.title}</span>
                         <span className="tiny muted">{fmtNum(s.longest.pages ?? 0)} páginas</span>
                       </div>
                     </Link>
                   )}
                   {s.topAuthors.length > 0 && (
-                    <div className="stack" style={{ gap: 4 }}>
+                    <div className="hl-authors">
                       <span className="eyebrow">Autores mais lidos</span>
                       {s.topAuthors.map((a) => (
-                        <span key={a.name} className="small">
-                          <b>{a.name}</b> · {a.n} livros
-                        </span>
+                        <div key={a.name} className="hl-author">
+                          <div className="row between" style={{ gap: 8 }}>
+                            <span className="small" style={{ fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                            <span className="tiny muted" style={{ flexShrink: 0 }}>
+                              {a.n} {a.n === 1 ? 'livro' : 'livros'}
+                            </span>
+                          </div>
+                          <div className="progress" style={{ height: 6 }}>
+                            <div style={{ width: `${(a.n / s.topAuthors[0].n) * 100}%`, background: 'var(--sage)' }} />
+                          </div>
+                        </div>
                       ))}
-                    </div>
-                  )}
-                  {s.abandoned > 0 && (
-                    <div className="stack" style={{ gap: 4 }}>
-                      <span className="eyebrow">Abandonados</span>
-                      <span className="small">{s.abandoned} {s.abandoned === 1 ? 'livro' : 'livros'} — tudo bem!</span>
                     </div>
                   )}
                 </div>

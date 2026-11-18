@@ -418,3 +418,17 @@ body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; 
   .pick .cover { width: 100% !important; max-width: 130px; height: auto !important; aspect-ratio: 2 / 3; }
   .insights-grid { align-items: start; }
 }
+
+/* destaques do ano */
+.hl-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hl-tile { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 16px; text-decoration: none; color: var(--ink); min-width: 0; }
+.hl-t { font-weight: 600; font-size: 15px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hl-authors { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: var(--tan); }
+.hl-author { display: flex; flex-direction: column; gap: 4px; }
+@media (min-width: 700px) {
+  .hl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hl-tile { flex-direction: row; align-items: center; }
+  .hl-authors { grid-column: auto; }
+}
+.hl-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+@media (min-width: 700px) { .hl-tile.wide { grid-column: auto; } }
