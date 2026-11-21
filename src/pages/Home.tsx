@@ -217,7 +217,7 @@ export default function Home() {
           </div>
 
           {!(goal && year === thisYear) && canEdit && year === thisYear && (
-            <Link to={`${base}/perfil`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+            <Link to={`${base}/perfil?aba=conta`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
               <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
             </Link>
           )}

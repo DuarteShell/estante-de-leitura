@@ -1,5 +1,5 @@
 import type { Book, Reading, ReadingFormat } from './types';
-import { readingYear, seriesKey, seriesTotal } from './util';
+import { norm, readingYear, seriesKey, seriesTotal } from './util';
 
 export interface YearStats {
   year: number;
@@ -236,5 +236,275 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     // próximos de saga abandonados também entram (retomar a leitura)
     suggestions: rank([...unread, ...books.filter((b) => b.status === 'abandonado' && nextIds.has(b.id))]),
     wishSuggestions: rank(books.filter((b) => b.status === 'desejo'))
+  };
+}
+
+/* ---------- Perfil de leitor: um ano ou o histórico todo ---------- */
+
+export type Period = number | 'all';
+
+export type AxisKey = 'ritmo' | 'folego' | 'variedade' | 'constancia' | 'sagas' | 'descoberta';
+
+export interface ProfileAxis {
+  key: AxisKey;
+  label: string;
+  /** 0–100, para o radar */
+  value: number;
+  /** o número de verdade por trás do eixo */
+  detail: string;
+  /** como o eixo é medido */
+  hint: string;
+}
+
+export interface Ranked {
+  name: string;
+  n: number;
+}
+
+export interface ReaderProfile {
+  period: Period;
+  books: number;
+  pages: number;
+  audiobooks: number;
+  /** livros por mês no período (até hoje, se for o ano corrente) */
+  perMonth: number;
+  avgRating: number | null;
+  avgPages: number | null;
+  /** dias, em média, entre começar e terminar (só leituras com as duas datas) */
+  avgDays: number | null;
+  pagesPerDay: number | null;
+  abandoned: number;
+  authors: number;
+  newAuthors: number;
+  genres: Ranked[];
+  /** quantas leituras com nota 1★…5★ (meia estrela sobe: 3,5 → 4★) */
+  ratings: number[];
+  /** até 200 · 200–349 · 350–499 · 500+ páginas */
+  sizes: number[];
+  formats: Record<ReadingFormat | 'nd', number>;
+  /** só no histórico: livros por ano, do mais antigo ao atual */
+  byYear: { year: number; n: number }[];
+  axes: ProfileAxis[];
+  traits: string[];
+  records: {
+    favorite: { book: Book; rating: number } | null;
+    longest: Book | null;
+    shortest: Book | null;
+    fastest: { book: Book; days: number } | null;
+    slowest: { book: Book; days: number } | null;
+    topAuthor: Ranked | null;
+    topSeries: Ranked | null;
+    rereads: Ranked[];
+  };
+}
+
+export const SIZE_LABELS = ['até 200', '200–349', '350–499', '500+'];
+
+const dayMs = 86_400_000;
+const daysBetween = (a: string, b: string) => Math.max(1, Math.round((Date.parse(b) - Date.parse(a)) / dayMs) + 1);
+const sortKey = (r: Reading) => r.finished_at ?? `${readingYear(r) ?? 0}-99`;
+const clamp100 = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+const fmt1 = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+export function readerProfile(period: Period, books: Book[], readings: Reading[], now = new Date()): ReaderProfile {
+  const byId = new Map(books.map((b) => [b.id, b]));
+  const allFinished = readings.filter((r) => r.status === 'lido' && byId.has(r.book_id)).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const inPeriod = (r: Reading) => period === 'all' || readingYear(r) === period;
+  const finished = allFinished.filter(inPeriod);
+  const abandoned = readings.filter((r) => r.status === 'abandonado' && inPeriod(r)).length;
+  const thisYear = now.getFullYear();
+
+  // primeira leitura de cada autor no histórico → "descoberta"
+  const firstOfAuthor = new Map<string, string>();
+  for (const r of allFinished) {
+    const a = byId.get(r.book_id)?.author;
+    if (a && !firstOfAuthor.has(norm(a))) firstOfAuthor.set(norm(a), r.id);
+  }
+
+  const genres = new Map<string, number>();
+  const authors = new Map<string, number>();
+  const series = new Map<string, number>();
+  const formats = { fisico: 0, kindle: 0, audiobook: 0, outro: 0, nd: 0 };
+  const ratings = [0, 0, 0, 0, 0];
+  const sizes = [0, 0, 0, 0];
+  const months = new Set<string>();
+  let pages = 0;
+  let paged = 0;
+  let pagedBooks = 0;
+  let ratingSum = 0;
+  let rated = 0;
+  let inSeries = 0;
+  let newAuthors = 0;
+  let daySum = 0;
+  let dated = 0;
+  let datedPages = 0;
+  let datedPageDays = 0;
+  const rec: ReaderProfile['records'] = { favorite: null, longest: null, shortest: null, fastest: null, slowest: null, topAuthor: null, topSeries: null, rereads: [] };
+
+  for (const r of finished) {
+    const b = byId.get(r.book_id)!;
+    const audio = r.format === 'audiobook';
+    const p = r.pages_read ?? b.pages ?? 0;
+    formats[r.format ?? 'nd'] += 1;
+    if (r.finished_at) months.add(r.finished_at.slice(0, 7));
+    b.genres.forEach((g) => genres.set(g, (genres.get(g) ?? 0) + 1));
+    if (b.author) {
+      authors.set(b.author, (authors.get(b.author) ?? 0) + 1);
+      if (firstOfAuthor.get(norm(b.author)) === r.id) newAuthors += 1;
+    }
+    if (b.series) {
+      inSeries += 1;
+      series.set(b.series, (series.get(b.series) ?? 0) + 1);
+    }
+    if (r.rating != null) {
+      ratingSum += r.rating;
+      rated += 1;
+      ratings[Math.max(0, Math.ceil(r.rating) - 1)] += 1;
+      if (!rec.favorite || r.rating >= rec.favorite.rating) rec.favorite = { book: b, rating: r.rating };
+    }
+    if (!audio && p > 0) {
+      pages += p;
+      paged += p;
+      pagedBooks += 1;
+      sizes[p < 200 ? 0 : p < 350 ? 1 : p < 500 ? 2 : 3] += 1;
+      if (b.pages && (!rec.longest || b.pages > (rec.longest.pages ?? 0))) rec.longest = b;
+      if (b.pages && (!rec.shortest || b.pages < (rec.shortest.pages ?? Infinity))) rec.shortest = b;
+    }
+    if (r.started_at && r.finished_at && r.finished_at >= r.started_at) {
+      const d = daysBetween(r.started_at, r.finished_at);
+      daySum += d;
+      dated += 1;
+      if (!audio && p > 0) {
+        datedPages += p;
+        datedPageDays += d;
+      }
+      if (!rec.fastest || d < rec.fastest.days) rec.fastest = { book: b, days: d };
+      if (!rec.slowest || d > rec.slowest.days) rec.slowest = { book: b, days: d };
+    }
+  }
+
+  // período em meses: ano fechado = 12; ano corrente = até hoje; histórico = da primeira leitura até hoje
+  let spanMonths = 12;
+  if (period === thisYear) spanMonths = now.getMonth() + now.getDate() / 31;
+  else if (period === 'all' && allFinished.length) {
+    const first = allFinished[0];
+    const fy = Number((first.finished_at ?? `${readingYear(first) ?? thisYear}-01`).slice(0, 4));
+    const fm = first.finished_at ? Number(first.finished_at.slice(5, 7)) - 1 : 0;
+    spanMonths = (thisYear - fy) * 12 + now.getMonth() - fm + now.getDate() / 31;
+  }
+  spanMonths = Math.max(1, spanMonths);
+  const perMonth = finished.length / spanMonths;
+
+  const sortMap = (m: Map<string, number>) =>
+    [...m.entries()].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'pt-BR'));
+  const genreList = sortMap(genres);
+  const authorList = sortMap(authors);
+  const seriesList = sortMap(series);
+  rec.topAuthor = authorList[0]?.n > 1 ? authorList[0] : null;
+  rec.topSeries = seriesList[0]?.n > 1 ? seriesList[0] : null;
+  const readCount = new Map<string, number>();
+  finished.forEach((r) => readCount.set(r.book_id, (readCount.get(r.book_id) ?? 0) + 1));
+  rec.rereads = [...readCount.entries()].filter(([, n]) => n > 1).map(([id, n]) => ({ name: byId.get(id)!.title, n })).sort((a, b) => b.n - a.n);
+  if (rec.shortest && rec.shortest === rec.longest) rec.shortest = null;
+  if (rec.slowest && rec.fastest && rec.slowest.book === rec.fastest.book) rec.slowest = null;
+
+  const avgPages = pagedBooks ? paged / pagedBooks : null;
+  const n = finished.length;
+  const datedShare = n ? finished.filter((r) => r.finished_at).length / n : 0;
+  const activeSpan = Math.max(1, Math.ceil(spanMonths));
+  const constancy = datedShare >= 0.5 ? months.size / activeSpan : null;
+
+  const axes: ProfileAxis[] = [
+    {
+      key: 'ritmo',
+      label: 'Ritmo',
+      value: clamp100((perMonth / 3) * 100),
+      detail: `${fmt1(perMonth)} ${perMonth >= 0.95 && perMonth < 1.05 ? 'livro' : 'livros'} por mês`,
+      hint: 'Livros terminados por mês. 3 por mês enchem o eixo.'
+    },
+    {
+      key: 'folego',
+      label: 'Fôlego',
+      value: clamp100(((avgPages ?? 0) / 500) * 100),
+      detail: avgPages ? `${Math.round(avgPages)} páginas em média` : 'sem páginas cadastradas',
+      hint: 'Tamanho médio dos livros (fora audiobooks). 500 páginas enchem o eixo.'
+    },
+    {
+      key: 'variedade',
+      label: 'Variedade',
+      value: clamp100((genreList.length / 8) * 100),
+      detail: `${genreList.length} ${genreList.length === 1 ? 'gênero' : 'gêneros'} diferentes`,
+      hint: 'Quantos gêneros diferentes você leu. 8 enchem o eixo.'
+    },
+    {
+      key: 'constancia',
+      label: 'Constância',
+      value: clamp100((constancy ?? 0) * 100),
+      detail: constancy == null ? 'faltam datas de término' : `leu em ${months.size} de ${activeSpan} meses`,
+      hint: 'Meses em que terminou pelo menos um livro.'
+    },
+    {
+      key: 'sagas',
+      label: 'Sagas',
+      value: pct(inSeries, n),
+      detail: `${pct(inSeries, n)}% das leituras são de sagas`,
+      hint: 'Parte das leituras que pertence a uma saga ou série.'
+    },
+    {
+      key: 'descoberta',
+      label: 'Descoberta',
+      value: pct(newAuthors, n),
+      detail: `${newAuthors} ${newAuthors === 1 ? 'autor novo' : 'autores novos'} (${pct(newAuthors, n)}%)`,
+      hint: 'Leituras de autores que você nunca tinha lido antes.'
+    }
+  ];
+
+  // traços: frases curtas que resumem o jeito de ler
+  const traits: string[] = [];
+  const top = genreList[0];
+  if (top && n >= 3 && top.n / n >= 0.5) traits.push(`Fã de ${top.name.toLowerCase()}`);
+  else if (genreList.length >= 6) traits.push('Lê de tudo um pouco');
+  if (perMonth >= 3) traits.push('Maratona de leitura');
+  if (avgPages && avgPages >= 420) traits.push('Não foge de tijolão');
+  else if (avgPages && avgPages <= 220 && pagedBooks >= 3) traits.push('Prefere livros curtos');
+  if (n >= 4 && inSeries / n >= 0.4) traits.push('Devora sagas');
+  if (n >= 4 && newAuthors / n >= 0.6) traits.push('Sempre descobrindo autores');
+  else if (n >= 6 && newAuthors / n <= 0.25) traits.push('Fiel aos autores favoritos');
+  if (constancy != null && constancy >= 0.8 && activeSpan >= 4) traits.push('Leitura o ano todo');
+  if (rated >= 4 && ratingSum / rated >= 4.3) traits.push('Dá nota alta fácil');
+  else if (rated >= 4 && ratingSum / rated <= 3.2) traits.push('Difícil de agradar');
+  if (n >= 4 && formats.audiobook / n >= 0.3) traits.push('Ouve livros');
+  if (n >= 4 && formats.kindle / n >= 0.5) traits.push('Leitura digital');
+  if (n + abandoned >= 6 && abandoned / (n + abandoned) >= 0.15) traits.push('Larga o que não agrada');
+  else if (n >= 10 && abandoned === 0) traits.push('Termina o que começa');
+
+  const byYear: ReaderProfile['byYear'] = [];
+  if (period === 'all' && allFinished.length) {
+    const ys = allFinished.map(readingYear).filter((y): y is number => y != null);
+    for (let y = Math.min(...ys, thisYear); y <= thisYear; y++) byYear.push({ year: y, n: ys.filter((x) => x === y).length });
+  }
+
+  return {
+    period,
+    books: n,
+    pages,
+    audiobooks: formats.audiobook,
+    perMonth,
+    avgRating: rated ? ratingSum / rated : null,
+    avgPages,
+    avgDays: dated ? daySum / dated : null,
+    pagesPerDay: datedPageDays ? datedPages / datedPageDays : null,
+    abandoned,
+    authors: authors.size,
+    newAuthors,
+    genres: genreList,
+    ratings,
+    sizes,
+    formats,
+    byYear,
+    axes,
+    traits: traits.slice(0, 5),
+    records: rec
   };
 }

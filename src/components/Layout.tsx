@@ -55,7 +55,7 @@ export function Layout() {
           <Icon name="heart" /> Lista de desejos
         </Link>
         <NavLink to={`${base}/perfil`} className={({ isActive }) => cls(isActive)}>
-          <Icon name="user" /> {canEdit ? 'Perfil e dados' : 'Sobre'}
+          <Icon name="user" /> {canEdit ? 'Perfil de leitor' : 'Sobre'}
         </NavLink>
         {canEdit && (
           <Link to={`${base}/adicionar`} className="btn btn-primary nav-add-wide">
