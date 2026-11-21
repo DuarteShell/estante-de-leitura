@@ -66,15 +66,11 @@ function Kpi({ icon, value, label, bg, fg }: { icon: IconName; value: string; la
 }
 
 function PickCard({ s, base }: { s: Suggestion; base: string }) {
-  const saga = /^(Continua|Retomar) a saga /.test(s.reason);
   return (
     <Link to={`${base}/livro/${s.book.id}`} className="pick">
       <Cover book={s.book} width={80} />
       <span className="serif pick-t">{s.book.title}</span>
-      <span className={`pick-tag${saga ? ' saga' : ''}`}>
-        <Icon name={saga ? 'readings' : 'heart'} size={12} />
-        <span>{saga ? s.reason.replace(/^Continua a saga /, '') : s.reason}</span>
-      </span>
+      {s.book.author && <span className="pick-a">{s.book.author}</span>}
     </Link>
   );
 }
@@ -300,13 +296,16 @@ export default function Home() {
           {(picks.length > 0 || insights.openSeries.length > 0) && (
             <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
               {picks.length > 0 && (
-                <div className="stack">
+                <div className="stack pick-col">
                   <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
                   <div className="pick-grid">
                     {picks.map((p) => (
                       <PickCard key={p.book.id} s={p} base={base} />
                     ))}
                   </div>
+                  <Link to={`${base}/estante?f=${shelfPct.unread > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
+                    {shelfPct.unread > 0 ? `ver os ${shelfPct.unread} não lidos` : 'ver lista de desejos'} →
+                  </Link>
                 </div>
               )}
               {insights.openSeries.length > 0 && (
