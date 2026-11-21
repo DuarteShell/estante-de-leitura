@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
 import { Icon, type IconName } from '../components/Icon';
 import { Cover, Empty } from '../components/ui';
-import { availableYears, legacyBooks, shelfInsights, shelfProgress, yearStats, type OpenSeries, type Suggestion, type VolumeState } from '../lib/stats';
+import { availableYears, shelfInsights, shelfProgress, yearStats, type OpenSeries, type Suggestion, type VolumeState } from '../lib/stats';
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
 import { useLibrary } from '../store/library';
@@ -129,7 +129,6 @@ export default function Home() {
   const [year, setYear] = useState(thisYear);
   const s = useMemo(() => yearStats(year, books, readings), [year, books, readings]);
   const reading = books.filter((b) => b.status === 'lendo');
-  const legacy = useMemo(() => legacyBooks(books, readings), [books, readings]);
   const totals = {
     shelf: books.filter((b) => b.owned && b.status !== 'desejo').length,
     read: books.filter((b) => b.status === 'lido').length,
@@ -148,6 +147,8 @@ export default function Home() {
       pct: Math.min(100, Math.round((s.books / goal) * 100)),
       left,
       perMonth: left / Math.max(0.5, 12 - elapsed),
+      // no ritmo atual, quantos livros até o fim do ano
+      projection: Math.round((s.books / Math.max(1, elapsed)) * 12),
       behind: Math.max(0, Math.floor((goal * elapsed) / 12) - s.books)
     };
   }, [goal, year, thisYear, s.books]);
@@ -191,41 +192,166 @@ export default function Home() {
         </Empty>
       ) : (
         <>
-          <div className="row between wrap">
-            <h2>{canEdit ? 'Seu ano em livros' : 'O ano em livros'}</h2>
-            <label className="row small" style={{ gap: 6 }}>
-              <span className="muted">Ano</span>
-              <select className="select" style={{ width: 'auto', minHeight: 40, padding: '6px 10px' }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <section className="home-section" aria-labelledby="sec-estante">
+            <div className="section-head">
+              <div className="stack" style={{ gap: 2 }}>
+                <span className="eyebrow">Visão geral</span>
+                <h2 id="sec-estante">{canEdit ? 'Sua estante' : 'A estante'}</h2>
+                <span className="small muted">
+                  <b>{totals.shelf}</b> na estante · <b>{totals.read}</b> lidos no total · <b>{totals.wish}</b> na lista de desejos
+                </span>
+              </div>
+            </div>
 
-          <div className="grid-stats">
-            <StatCard icon="book" value={String(s.books)} label="livros lidos" bg="#E3E8D5" fg="#4F6B47" />
-            <StatCard icon="pages" value={fmtNum(s.pages)} label="páginas" bg="#F1E4D3" fg="#7A5235" />
-            <StatCard icon="leaf" value={s.avgRating == null ? '—' : fmtRating(Math.round(s.avgRating * 10) / 10)} label="nota média" bg="#F6E9C9" fg="#8A5F1A" />
-            <StatCard icon="readings" value={String(reading.length)} label="lendo agora" bg="#E3E8D5" fg="#4F6B47" />
-          </div>
+            <div className={`estante-top${reading.length > 0 && shelfPct.total > 0 ? ' two' : ''}`}>
+              {reading.length > 0 && (
+                <section className="card stack" style={{ gap: 14 }}>
+                  <div className="row between">
+                    <span className="eyebrow">Lendo agora</span>
+                    <Link to={`${base}/estante?f=lendo`} className="small" style={{ fontWeight: 700, textDecoration: 'none' }}>
+                      {reading.length > 3 ? `ver todos (${reading.length})` : 'ver todos'}
+                    </Link>
+                  </div>
+                  <div className="now-list">
+                    {reading.slice(0, 3).map((b) => {
+                      const pct = b.pages && b.current_page ? Math.min(100, Math.round((b.current_page / b.pages) * 100)) : 0;
+                      const active = readings.find((r) => r.book_id === b.id && r.status === 'lendo');
+                      return (
+                        <Link key={b.id} to={`${base}/livro/${b.id}`} className="book-row">
+                          <Cover book={b} width={58} />
+                          <div className="stack grow" style={{ gap: 5 }}>
+                            <span className="t">{b.title}</span>
+                            <span className="small muted">
+                              {b.author ?? 'Autor desconhecido'}
+                              {active?.format ? ` · ${FORMAT_SHORT[active.format]}` : ''}
+                            </span>
+                            <div className="progress" style={{ height: 8 }}>
+                              <div style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="tiny" style={{ fontWeight: 700, color: 'var(--bark)' }}>
+                              {b.pages ? `p. ${b.current_page ?? 0} de ${b.pages} · ${pct}%` : 'Sem total de páginas'}
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+              {shelfPct.total > 0 && (
+                <section className="card stack ring-card" style={{ gap: 14 }}>
+                  <span className="eyebrow">Estante lida</span>
+                  <div className="shelf-body">
+                    <Ring pct={shelfPct.pct} />
+                    <div className="kpis">
+                      <Kpi icon="check" value={String(shelfPct.read)} label={`de ${shelfPct.total} lidos`} bg="#E3E8D5" fg="#4F6B47" />
+                      <Kpi icon="book" value={String(shelfPct.unread)} label="esperando leitura" bg="#F1E4D3" fg="#7A5235" />
+                      <Kpi
+                        icon="flag"
+                        value={shelfPct.unread === 0 ? 'Zerou!' : insights.monthsToClear ? duration(insights.monthsToClear) : '—'}
+                        label={
+                          shelfPct.unread === 0
+                            ? 'pilha vazia'
+                            : insights.monthsToClear
+                              ? `pra zerar · ${fmtRating(Math.round(insights.pace * 10) / 10)}/mês`
+                              : `sem leituras em ${thisYear}`
+                        }
+                        bg="#F6E9C9"
+                        fg="#8A5F1A"
+                      />
+                    </div>
+                  </div>
+                  {shelfPct.unread === 0 ? (
+                    <span className="tip">
+                      <Icon name="check" size={16} /> Todos os livros da estante já foram lidos{totals.wish ? ` · ${totals.wish} na lista de desejos` : ''}
+                    </span>
+                  ) : (
+                    shelfPct.pct < 50 &&
+                    shelfPct.unread >= 5 && (
+                      <span className="tip">
+                        <Icon name="leaf" size={16} /> Vale priorizar a estante antes de novas compras
+                      </span>
+                    )
+                  )}
+                </section>
+              )}
+            </div>
 
-          {!(goal && year === thisYear) && canEdit && year === thisYear && (
-            <Link to={`${base}/perfil?aba=conta`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
-              <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
-            </Link>
-          )}
+            {(picks.length > 0 || insights.openSeries.length > 0) && (
+              <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
+                {picks.length > 0 && (
+                  <div className="stack pick-col">
+                    <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
+                    <div className="pick-grid">
+                      {picks.map((p) => (
+                        <PickCard key={p.book.id} s={p} base={base} />
+                      ))}
+                    </div>
+                    <Link to={`${base}/estante?f=${shelfPct.unread > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
+                      {shelfPct.unread > 0 ? `ver os ${shelfPct.unread} não lidos` : 'ver lista de desejos'} →
+                    </Link>
+                  </div>
+                )}
+                {insights.openSeries.length > 0 && (
+                  <div className="stack">
+                    <div className="row between wrap" style={{ gap: 8 }}>
+                      <span className="eyebrow">Sagas em aberto</span>
+                      <div className="vol-legend">
+                        {(Object.keys(VOL_LABEL) as VolumeState[]).map((k) => (
+                          <span key={k}>
+                            <i className={k} /> {VOL_LABEL[k]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="stack" style={{ gap: 14 }}>
+                      {insights.openSeries.map((o) => (
+                        <SagaRow key={o.name} o={o} base={base} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+          </section>
 
-          {(goalInfo || shelfPct.total > 0) && (
-          <div className={`duo${goalInfo && shelfPct.total > 0 ? ' two' : ''}`}>
+          <section className="home-section" aria-labelledby="sec-ano">
+            <div className="section-head">
+              <div className="stack" style={{ gap: 2 }}>
+                <span className="eyebrow">Por ano</span>
+                <h2 id="sec-ano">{canEdit ? 'Seu ano em livros' : 'O ano em livros'}</h2>
+              </div>
+              <label className="row small year-pick" style={{ gap: 6 }}>
+                <span className="muted">Ano</span>
+                <select className="select" style={{ width: 'auto', minHeight: 40, padding: '6px 10px' }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid-stats">
+              <StatCard icon="book" value={String(s.books)} label="livros lidos" bg="#E3E8D5" fg="#4F6B47" />
+              <StatCard icon="pages" value={fmtNum(s.pages)} label="páginas" bg="#F1E4D3" fg="#7A5235" />
+              <StatCard icon="leaf" value={s.avgRating == null ? '—' : fmtRating(Math.round(s.avgRating * 10) / 10)} label="nota média" bg="#F6E9C9" fg="#8A5F1A" />
+              <StatCard icon="user" value={String(s.authors)} label={s.authors === 1 ? 'autor' : 'autores'} bg="#E2EAEC" fg="#4A6670" />
+            </div>
+
+            {!(goal && year === thisYear) && canEdit && year === thisYear && (
+              <Link to={`${base}/perfil?aba=conta`} className="card flat row" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+                <Icon name="flag" /> <span className="grow">Defina uma meta de leitura para {year}</span> <Icon name="back" size={18} className="flip" />
+              </Link>
+            )}
+
             {goalInfo && (
               <section className="card stack ring-card" style={{ gap: 14 }}>
                 <span className="eyebrow">Meta de {year}</span>
                 <div className="shelf-body">
                   <Ring pct={goalInfo.pct} label="da meta" color="var(--moss)" />
-                  <div className="kpis">
+                  <div className="kpis four">
                     <Kpi icon="book" value={String(s.books)} label={`de ${goal} livros`} bg="#E3E8D5" fg="#4F6B47" />
                     <Kpi
                       icon="flag"
@@ -241,6 +367,13 @@ export default function Home() {
                       bg="#F6E9C9"
                       fg="#8A5F1A"
                     />
+                    <Kpi
+                      icon="leaf"
+                      value={`~${goalInfo.projection}`}
+                      label="previsão no ritmo atual"
+                      bg="#E2EAEC"
+                      fg="#4A6670"
+                    />
                   </div>
                 </div>
                 {goalInfo.left > 0 && (
@@ -253,253 +386,140 @@ export default function Home() {
                 )}
               </section>
             )}
-          {shelfPct.total > 0 && (
-            <section className="card stack ring-card" style={{ gap: 14 }}>
-              <span className="eyebrow">Estante lida</span>
-              <div className="shelf-body">
-                <Ring pct={shelfPct.pct} />
-                <div className="kpis">
-                  <Kpi icon="check" value={String(shelfPct.read)} label={`de ${shelfPct.total} lidos`} bg="#E3E8D5" fg="#4F6B47" />
-                  <Kpi icon="book" value={String(shelfPct.unread)} label="esperando leitura" bg="#F1E4D3" fg="#7A5235" />
-                  <Kpi
-                    icon="flag"
-                    value={shelfPct.unread === 0 ? 'Zerou!' : insights.monthsToClear ? duration(insights.monthsToClear) : '—'}
-                    label={
-                      shelfPct.unread === 0
-                        ? 'pilha vazia'
-                        : insights.monthsToClear
-                          ? `pra zerar · ${fmtRating(Math.round(insights.pace * 10) / 10)}/mês`
-                          : `sem leituras em ${thisYear}`
-                    }
-                    bg="#F6E9C9"
-                    fg="#8A5F1A"
-                  />
-                </div>
-              </div>
-              {shelfPct.unread === 0 ? (
-                <span className="tip">
-                  <Icon name="check" size={16} /> Todos os livros da estante já foram lidos{totals.wish ? ` · ${totals.wish} na lista de desejos` : ''}
-                </span>
-              ) : (
-                shelfPct.pct < 50 &&
-                shelfPct.unread >= 5 && (
-                  <span className="tip">
-                    <Icon name="leaf" size={16} /> Vale priorizar a estante antes de novas compras
-                  </span>
-                )
-              )}
-            </section>
-          )}
-          </div>
-          )}
 
-          {(picks.length > 0 || insights.openSeries.length > 0) && (
-            <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
-              {picks.length > 0 && (
-                <div className="stack pick-col">
-                  <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
-                  <div className="pick-grid">
-                    {picks.map((p) => (
-                      <PickCard key={p.book.id} s={p} base={base} />
-                    ))}
-                  </div>
-                  <Link to={`${base}/estante?f=${shelfPct.unread > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
-                    {shelfPct.unread > 0 ? `ver os ${shelfPct.unread} não lidos` : 'ver lista de desejos'} →
-                  </Link>
-                </div>
-              )}
-              {insights.openSeries.length > 0 && (
-                <div className="stack">
-                  <div className="row between wrap" style={{ gap: 8 }}>
-                    <span className="eyebrow">Sagas em aberto</span>
-                    <div className="vol-legend">
-                      {(Object.keys(VOL_LABEL) as VolumeState[]).map((k) => (
-                        <span key={k}>
-                          <i className={k} /> {VOL_LABEL[k]}
-                        </span>
+            <div className="home-grid">
+              <section className="card stack">
+                <h2 style={{ fontSize: 19 }}>Gêneros em {year}</h2>
+                {topGenres.length ? (
+                  <>
+                    <div className="stack-bar" role="img" aria-label={topGenres.map((g) => `${g.name} ${g.n}`).join(', ')}>
+                      {topGenres.map((g, i) => (
+                        <div key={g.name} style={{ flex: g.n, background: GENRE_COLORS[i] }} />
                       ))}
                     </div>
+                    <div className="legend">
+                      {topGenres.map((g, i) => (
+                        <div key={g.name}>
+                          <i style={{ background: GENRE_COLORS[i] }} />
+                          <span className="grow">{g.name}</span>
+                          <b style={{ color: 'var(--bark)' }}>{Math.round((g.n / genreTotal) * 100)}%</b>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="small muted" style={{ margin: 0 }}>Adicione gêneros aos livros pra ver esse gráfico.</p>
+                )}
+                <hr className="divider" />
+                <span className="eyebrow">Como você leu</span>
+                <div className="fmt-boxes">
+                  <div style={{ background: '#F1E4D3' }}>
+                    <Icon name="book" size={20} />
+                    <b>{s.formats.fisico}</b>
+                    <span className="tiny muted">Físico</span>
                   </div>
-                  <div className="stack" style={{ gap: 14 }}>
-                    {insights.openSeries.map((o) => (
-                      <SagaRow key={o.name} o={o} base={base} />
-                    ))}
+                  <div style={{ background: '#E3E8D5' }}>
+                    <Icon name="kindle" size={20} />
+                    <b>{s.formats.kindle}</b>
+                    <span className="tiny muted">Kindle</span>
+                  </div>
+                  <div style={{ background: '#E2EAEC' }}>
+                    <Icon name="audio" size={20} />
+                    <b>{s.formats.audiobook}</b>
+                    <span className="tiny muted">Audiobook</span>
                   </div>
                 </div>
-              )}
-            </section>
-          )}
+                {s.formats.nd > 0 && <span className="tiny muted">{s.formats.nd} sem formato informado</span>}
+              </section>
 
-          <p className="small muted" style={{ margin: 0 }}>
-            Na estante: <b>{totals.shelf}</b> · Lidos no total: <b>{totals.read}</b>
-            {legacy.length > 0 && <> </>} · Desejos: <b>{totals.wish}</b>
-          </p>
-
-          <div className="home-grid">
-            {reading.length > 0 && (
-              <section className="stack span-2">
-                <div className="row between">
-                  <h2>Lendo agora</h2>
-                  <Link to={`${base}/estante?f=lendo`} className="small" style={{ fontWeight: 700, textDecoration: 'none' }}>
-                    ver todos
-                  </Link>
+              <section className="card stack month-card">
+                <h2 style={{ fontSize: 19 }}>Livros por mês</h2>
+                <div className="bars" role="img" aria-label={`Livros terminados por mês em ${year}: ${s.months.join(', ')}`}>
+                  {s.months.map((n, i) => (
+                    <div className="bar" key={i}>
+                      {n > 0 && <span style={{ fontSize: 10 }}>{n}</span>}
+                      <i className={n === 0 ? 'zero' : year === thisYear && i === new Date().getMonth() ? 'now' : ''} style={{ height: `calc((100% - 40px) * ${n / maxMonth})` }} />
+                      <span>{MONTH_INITIALS[i]}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="book-list">
-                  {reading.map((b) => {
-                    const pct = b.pages && b.current_page ? Math.min(100, Math.round((b.current_page / b.pages) * 100)) : 0;
-                    const active = readings.find((r) => r.book_id === b.id && r.status === 'lendo');
-                    return (
-                      <Link key={b.id} to={`${base}/livro/${b.id}`} className="book-row">
-                        <Cover book={b} width={58} />
-                        <div className="stack grow" style={{ gap: 5 }}>
-                          <span className="t">{b.title}</span>
-                          <span className="small muted">
-                            {b.author ?? 'Autor desconhecido'}
-                            {active?.format ? ` · ${FORMAT_SHORT[active.format]}` : ''}
-                          </span>
-                          <div className="progress" style={{ height: 8 }}>
-                            <div style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="tiny" style={{ fontWeight: 700, color: 'var(--bark)' }}>
-                            {b.pages ? `p. ${b.current_page ?? 0} de ${b.pages} · ${pct}%` : 'Sem total de páginas'}
-                          </span>
+                {s.books > 0 && (
+                  <div className="month-sum">
+                    <div>
+                      <b>{MONTH_NAMES[bestMonth]}</b>
+                      <span className="tiny muted">melhor mês · {s.months[bestMonth]}</span>
+                    </div>
+                    <div>
+                      <b>{fmtRating(Math.round((s.books / monthsSoFar) * 10) / 10)}</b>
+                      <span className="tiny muted">média por mês</span>
+                    </div>
+                    <div>
+                      <b>
+                        {activeMonths}
+                        <small>/{monthsSoFar}</small>
+                      </b>
+                      <span className="tiny muted">meses com leitura</span>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {(s.best || s.topAuthors.length > 0 || s.longest) && (
+                <section className="card stack span-2">
+                  <div className="row between wrap" style={{ gap: 8 }}>
+                    <h2 style={{ fontSize: 19 }}>Destaques de {year}</h2>
+                    {s.abandoned > 0 && (
+                      <span className="pick-tag">
+                        {s.abandoned} {s.abandoned === 1 ? 'abandonado' : 'abandonados'} · tudo bem!
+                      </span>
+                    )}
+                  </div>
+                  <div className="hl-grid">
+                    {s.best && (
+                      <Link to={`${base}/livro/${s.best.book.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F6E9C9' }}>
+                        <Cover book={s.best.book} width={96} />
+                        <div className="stack" style={{ gap: 4, minWidth: 0 }}>
+                          <span className="eyebrow">Melhor nota</span>
+                          <span className="serif hl-t">{s.best.book.title}</span>
+                          {s.best.book.author && <span className="small muted hl-a">{s.best.book.author}</span>}
+                          <span className="small hl-m">{fmtRating(s.best.rating)} estrelas</span>
                         </div>
                       </Link>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            <section className="card stack">
-              <h2 style={{ fontSize: 19 }}>Gêneros em {year}</h2>
-              {topGenres.length ? (
-                <>
-                  <div className="stack-bar" role="img" aria-label={topGenres.map((g) => `${g.name} ${g.n}`).join(', ')}>
-                    {topGenres.map((g, i) => (
-                      <div key={g.name} style={{ flex: g.n, background: GENRE_COLORS[i] }} />
-                    ))}
-                  </div>
-                  <div className="legend">
-                    {topGenres.map((g, i) => (
-                      <div key={g.name}>
-                        <i style={{ background: GENRE_COLORS[i] }} />
-                        <span className="grow">{g.name}</span>
-                        <b style={{ color: 'var(--bark)' }}>{Math.round((g.n / genreTotal) * 100)}%</b>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="small muted" style={{ margin: 0 }}>Adicione gêneros aos livros pra ver esse gráfico.</p>
-              )}
-              <hr className="divider" />
-              <span className="eyebrow">Como você leu</span>
-              <div className="fmt-boxes">
-                <div style={{ background: '#F1E4D3' }}>
-                  <Icon name="book" size={20} />
-                  <b>{s.formats.fisico}</b>
-                  <span className="tiny muted">Físico</span>
-                </div>
-                <div style={{ background: '#E3E8D5' }}>
-                  <Icon name="kindle" size={20} />
-                  <b>{s.formats.kindle}</b>
-                  <span className="tiny muted">Kindle</span>
-                </div>
-                <div style={{ background: '#E2EAEC' }}>
-                  <Icon name="audio" size={20} />
-                  <b>{s.formats.audiobook}</b>
-                  <span className="tiny muted">Audiobook</span>
-                </div>
-              </div>
-              {s.formats.nd > 0 && <span className="tiny muted">{s.formats.nd} sem formato informado</span>}
-            </section>
-
-            <section className="card stack month-card">
-              <h2 style={{ fontSize: 19 }}>Livros por mês</h2>
-              <div className="bars" role="img" aria-label={`Livros terminados por mês em ${year}: ${s.months.join(', ')}`}>
-                {s.months.map((n, i) => (
-                  <div className="bar" key={i}>
-                    {n > 0 && <span style={{ fontSize: 10 }}>{n}</span>}
-                    <i className={n === 0 ? 'zero' : year === thisYear && i === new Date().getMonth() ? 'now' : ''} style={{ height: `calc((100% - 40px) * ${n / maxMonth})` }} />
-                    <span>{MONTH_INITIALS[i]}</span>
-                  </div>
-                ))}
-              </div>
-              {s.books > 0 && (
-                <div className="month-sum">
-                  <div>
-                    <b>{MONTH_NAMES[bestMonth]}</b>
-                    <span className="tiny muted">melhor mês · {s.months[bestMonth]}</span>
-                  </div>
-                  <div>
-                    <b>{fmtRating(Math.round((s.books / monthsSoFar) * 10) / 10)}</b>
-                    <span className="tiny muted">média por mês</span>
-                  </div>
-                  <div>
-                    <b>
-                      {activeMonths}
-                      <small>/{monthsSoFar}</small>
-                    </b>
-                    <span className="tiny muted">meses com leitura</span>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {(s.best || s.topAuthors.length > 0 || s.longest) && (
-              <section className="card stack span-2">
-                <div className="row between wrap" style={{ gap: 8 }}>
-                  <h2 style={{ fontSize: 19 }}>Destaques de {year}</h2>
-                  {s.abandoned > 0 && (
-                    <span className="pick-tag">
-                      {s.abandoned} {s.abandoned === 1 ? 'abandonado' : 'abandonados'} · tudo bem!
-                    </span>
-                  )}
-                </div>
-                <div className="hl-grid">
-                  {s.best && (
-                    <Link to={`${base}/livro/${s.best.book.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F6E9C9' }}>
-                      <Cover book={s.best.book} width={48} />
-                      <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-                        <span className="eyebrow">Melhor nota</span>
-                        <span className="serif hl-t">{s.best.book.title}</span>
-                        <span className="tiny muted">{fmtRating(s.best.rating)} estrelas</span>
-                      </div>
-                    </Link>
-                  )}
-                  {s.longest && (
-                    <Link to={`${base}/livro/${s.longest.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F1E4D3' }}>
-                      <Cover book={s.longest} width={48} />
-                      <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-                        <span className="eyebrow">Mais longo</span>
-                        <span className="serif hl-t">{s.longest.title}</span>
-                        <span className="tiny muted">{fmtNum(s.longest.pages ?? 0)} páginas</span>
-                      </div>
-                    </Link>
-                  )}
-                  {s.topAuthors.length > 0 && (
-                    <div className="hl-authors">
-                      <span className="eyebrow">Autores mais lidos</span>
-                      {s.topAuthors.map((a) => (
-                        <div key={a.name} className="hl-author">
-                          <div className="row between" style={{ gap: 8 }}>
-                            <span className="small" style={{ fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                            <span className="tiny muted" style={{ flexShrink: 0 }}>
-                              {a.n} {a.n === 1 ? 'livro' : 'livros'}
-                            </span>
-                          </div>
-                          <div className="progress" style={{ height: 6 }}>
-                            <div style={{ width: `${(a.n / s.topAuthors[0].n) * 100}%`, background: 'var(--sage)' }} />
-                          </div>
+                    )}
+                    {s.longest && (
+                      <Link to={`${base}/livro/${s.longest.id}`} className={`hl-tile${s.best && s.longest ? '' : ' wide'}`} style={{ background: '#F1E4D3' }}>
+                        <Cover book={s.longest} width={96} />
+                        <div className="stack" style={{ gap: 4, minWidth: 0 }}>
+                          <span className="eyebrow">Mais longo</span>
+                          <span className="serif hl-t">{s.longest.title}</span>
+                          {s.longest.author && <span className="small muted hl-a">{s.longest.author}</span>}
+                          <span className="small hl-m">{fmtNum(s.longest.pages ?? 0)} páginas</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
+                      </Link>
+                    )}
+                    {s.topAuthors.length > 0 && (
+                      <div className="hl-authors">
+                        <span className="eyebrow">Autores mais lidos</span>
+                        {s.topAuthors.map((a) => (
+                          <div key={a.name} className="hl-author">
+                            <div className="row between" style={{ gap: 8 }}>
+                              <span className="small" style={{ fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                              <span className="tiny muted" style={{ flexShrink: 0 }}>
+                                {a.n} {a.n === 1 ? 'livro' : 'livros'}
+                              </span>
+                            </div>
+                            <div className="progress" style={{ height: 6 }}>
+                              <div style={{ width: `${(a.n / s.topAuthors[0].n) * 100}%`, background: 'var(--sage)' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
+          </section>
         </>
       )}
     </div>

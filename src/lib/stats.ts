@@ -14,6 +14,8 @@ export interface YearStats {
   formats: Record<ReadingFormat | 'nd', number>;
   abandoned: number;
   topAuthors: { name: string; n: number }[];
+  /** autores diferentes lidos no ano */
+  authors: number;
   best: { book: Book; rating: number } | null;
   longest: Book | null;
 }
@@ -65,6 +67,7 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
     formats,
     abandoned: inYear.filter((r) => r.status === 'abandonado').length,
     topAuthors: sortMap(authors).filter((a) => a.n > 1).slice(0, 3),
+    authors: authors.size,
     best,
     longest
   };
