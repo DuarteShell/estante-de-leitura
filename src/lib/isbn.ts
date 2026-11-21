@@ -305,6 +305,62 @@ export async function searchBooks(q: string): Promise<FoundBook[]> {
   return (d?.items ?? []).map(fromGoogle).filter(Boolean) as FoundBook[];
 }
 
+interface OLDoc {
+  title?: string;
+  author_name?: string[];
+  number_of_pages_median?: number;
+  cover_i?: number;
+  isbn?: string[];
+  subject?: string[];
+}
+
+/** Entre as várias edições da obra, prefere ISBN-13 de edição brasileira (978-65 / 978-85). */
+function pickIsbn(list: string[] = []): string | null {
+  const isbn13 = list.filter((s) => /^97[89]\d{10}$/.test(s));
+  return isbn13.find((s) => /^978(65|85)/.test(s)) ?? isbn13[0] ?? list[0] ?? null;
+}
+
+async function openLibrarySearch(q: string): Promise<FoundBook[] | null> {
+  const fields = 'title,author_name,number_of_pages_median,cover_i,isbn,subject';
+  const d = (await getJson(
+    `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&lang=pt&limit=15&fields=${fields}`
+  )) as { docs?: OLDoc[] } | null;
+  if (!d) return null;
+  return (d.docs ?? [])
+    .filter((x) => x.title)
+    .map((x) => ({
+      title: x.title!,
+      author: x.author_name?.[0] ?? null,
+      pages: x.number_of_pages_median || null,
+      cover_url: x.cover_i ? `https://covers.openlibrary.org/b/id/${x.cover_i}-L.jpg` : null,
+      genres: translateGenres(x.subject ?? []),
+      isbn: pickIsbn(x.isbn),
+      source: 'Open Library'
+    }));
+}
+
+/**
+ * Busca livre por título, autor ou ISBN (aba "Buscar" de adicionar livro).
+ * O Google Books sem chave vive estourando a cota (429), então cai pro Open Library.
+ * Devolve null só se as duas fontes falharem (sem internet / fora do ar).
+ */
+export async function searchByText(q: string): Promise<FoundBook[] | null> {
+  const text = q.trim();
+  if (!text) return [];
+  if (isValidIsbn(text)) {
+    const hit = await lookupIsbn(text);
+    return hit ? [hit] : [];
+  }
+  const g = (await getJson(
+    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(text)}&maxResults=15&printType=books`
+  )) as { items?: GVolume[] } | null;
+  const fromG = (g?.items ?? []).map(fromGoogle).filter(Boolean) as FoundBook[];
+  if (fromG.length) return fromG;
+  const fromOL = await openLibrarySearch(text);
+  if (fromOL) return fromOL;
+  return g ? [] : null;
+}
+
 /** Capa (e gêneros/páginas, se faltarem) a partir do título + autor — usado na importação */
 export async function findCover(title: string, author: string | null): Promise<FoundBook | null> {
   const q = `intitle:${title}${author ? ` inauthor:${author.split(',')[0]}` : ''}`;

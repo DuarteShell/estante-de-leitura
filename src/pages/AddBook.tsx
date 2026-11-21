@@ -4,7 +4,7 @@ import { BarcodeScanner } from '../components/BarcodeScanner';
 import { BookForm } from '../components/BookForm';
 import { Icon } from '../components/Icon';
 import { Cover, Empty } from '../components/ui';
-import { cleanIsbn, isValidIsbn, lookupIsbn, searchBooks, type FoundBook } from '../lib/isbn';
+import { cleanIsbn, isValidIsbn, lookupIsbn, searchByText, type FoundBook } from '../lib/isbn';
 import type { Book, BookStatus } from '../lib/types';
 import { bookKey } from '../lib/util';
 import { useLibrary } from '../store/library';
@@ -60,8 +60,23 @@ export default function AddBook() {
   const doSearch = async () => {
     if (!query.trim()) return;
     setBusy(true);
-    setResults(await searchBooks(query));
+    setMessage(null);
+    const found = await searchByText(query);
     setBusy(false);
+    if (found === null) {
+      setResults(null);
+      setMessage('A busca não respondeu agora. Tente de novo em instantes ou cadastre à mão.');
+    } else setResults(found);
+  };
+
+  /** Resultado do Open Library é a obra; pelo ISBN escolhido (de preferência o brasileiro) puxa os dados daquela edição. */
+  const pick = async (r: FoundBook) => {
+    if (r.source !== 'Open Library' || !r.isbn) return fill(r);
+    setBusy(true);
+    const ed = await lookupIsbn(r.isbn);
+    setBusy(false);
+    if (ed) setMessage(`Edição encontrada via ${ed.source}. Confira os dados:`);
+    fill(ed ? { ...ed, cover_url: ed.cover_url ?? r.cover_url, pages: ed.pages ?? r.pages, genres: ed.genres.length ? ed.genres : r.genres } : r);
   };
 
   const duplicate =
@@ -99,7 +114,7 @@ export default function AddBook() {
                 ['manual', 'Manual']
               ] as [Mode, string][]
             ).map(([m, l]) => (
-              <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => (m === 'manual' ? fill(null) : setMode(m))}>
+              <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => (m === 'manual' ? fill(null) : (setMode(m), setMessage(null)))}>
                 {l}
               </button>
             ))}
@@ -147,6 +162,13 @@ export default function AddBook() {
                   {busy ? '…' : 'Buscar'}
                 </button>
               </form>
+              {busy && <div className="empty">Procurando…</div>}
+              {message && !busy && <p className="small" style={{ margin: 0, color: 'var(--danger)' }}>{message}</p>}
+              {results && results.length > 0 && !busy && (
+                <p className="tiny muted" style={{ margin: 0 }}>
+                  Toque no livro pra conferir e salvar. Não achou a edição certa? Busque pelo ISBN ou ajuste os dados no formulário.
+                </p>
+              )}
               {results && results.length === 0 && (
                 <Empty action={<button className="btn" onClick={() => fill({ title: query, author: null, pages: null, cover_url: null, genres: [], isbn: null, source: '' })}>Cadastrar à mão</button>}>
                   Nada encontrado para “{query}”.
@@ -154,7 +176,7 @@ export default function AddBook() {
               )}
               <div className="stack">
                 {results?.map((r, i) => (
-                  <button key={i} className="book-row" style={{ textAlign: 'left', width: '100%' }} onClick={() => fill(r)}>
+                  <button key={i} className="book-row" style={{ textAlign: 'left', width: '100%' }} onClick={() => pick(r)} disabled={busy}>
                     <Cover book={r} width={46} />
                     <div className="stack grow" style={{ gap: 3 }}>
                       <span className="t">{r.title}</span>
