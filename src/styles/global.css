@@ -316,6 +316,13 @@ h3 { font-size: 17px; }
 .star svg { position: absolute; left: 0; top: 0; }
 .star .fill { position: absolute; left: 0; top: 0; overflow: hidden; height: 100%; }
 .star-input .star button { position: absolute; top: 0; height: 100%; width: 50%; border: none; background: transparent; padding: 0; }
+.fav { display: inline-flex; line-height: 0; }
+.rating-row { display: flex; align-items: flex-start; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.heart-input { border: none; background: transparent; padding: 2px; border-radius: 12px; line-height: 0; transition: transform 0.15s ease; }
+.heart-input:hover { transform: scale(1.08); }
+.heart-input.on svg { animation: heart-pop 0.25s ease; }
+@keyframes heart-pop { 50% { transform: scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .heart-input, .heart-input.on svg { transition: none; animation: none; } }
 
 /* citações */
 .quote { background: var(--cream); border-radius: 18px; padding: 16px 16px 12px 18px; display: flex; flex-direction: column; gap: 8px; }

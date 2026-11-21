@@ -44,6 +44,8 @@ export interface Reading {
   finished_at: string | null;
   year: number | null;
   rating: number | null; // 0–5, passo 0,5
+  /** coração: favorito, além da nota */
+  favorite?: boolean;
   format: ReadingFormat | null;
   pages_read: number | null;
   review: string | null;

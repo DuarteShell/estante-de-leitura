@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Reading, ReadingFormat, ReadingStatus } from '../lib/types';
 import { todayIso } from '../lib/util';
-import { ChipGroup, FORMAT_OPTIONS, Modal, StarInput } from './ui';
+import { ChipGroup, FORMAT_OPTIONS, HeartInput, Modal, StarInput } from './ui';
 
 export interface ReadingDraft {
   status: ReadingStatus;
@@ -10,6 +10,7 @@ export interface ReadingDraft {
   year: string;
   yearOnly: boolean;
   rating: number | null;
+  favorite: boolean;
   format: ReadingFormat | '';
   pages_read: string;
   review: string;
@@ -23,6 +24,7 @@ export const draftFrom = (r?: Partial<Reading>): ReadingDraft => ({
   year: r?.year ? String(r.year) : String(new Date().getFullYear()),
   yearOnly: !!r?.year && !r.started_at && !r.finished_at,
   rating: r?.rating ?? null,
+  favorite: !!r?.favorite,
   format: r?.format ?? '',
   pages_read: r?.pages_read ? String(r.pages_read) : '',
   review: r?.review ?? ''
@@ -34,6 +36,7 @@ export const draftToReading = (d: ReadingDraft): Partial<Reading> => ({
   finished_at: d.yearOnly || d.status === 'lendo' ? null : d.finished_at || null,
   year: d.yearOnly && d.year ? Number(d.year) : null,
   rating: d.status === 'lendo' ? null : d.rating,
+  favorite: d.status !== 'lendo' && d.favorite,
   format: d.format || null,
   pages_read: d.pages_read ? Number(d.pages_read) : null,
   review: d.review.trim() || null
@@ -93,7 +96,13 @@ export function ReadingFields({
       {d.status !== 'lendo' && (
         <div className="field">
           <span>Nota</span>
-          <StarInput value={d.rating} onChange={(rating) => set({ rating })} />
+          <div className="rating-row">
+            <StarInput value={d.rating} onChange={(rating) => set({ rating })} />
+            <div className="stack" style={{ gap: 6, alignItems: 'center' }}>
+              <HeartInput value={d.favorite} onChange={(favorite) => set({ favorite })} />
+              <span className="tiny muted">{d.favorite ? 'Favorito' : 'Favoritar'}</span>
+            </div>
+          </div>
         </div>
       )}
 

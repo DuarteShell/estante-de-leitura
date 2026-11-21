@@ -47,7 +47,7 @@ export function exportCsv(d: LibraryData) {
     };
     const rs = byBook.get(b.id) ?? [];
     if (!rs.length) {
-      rows.push({ ...base, Início: '', Término: '', Ano: '', Nota: '', Formato: '', Resenha: '' });
+      rows.push({ ...base, Início: '', Término: '', Ano: '', Nota: '', Favorito: '', Formato: '', Resenha: '' });
       continue;
     }
     for (const r of rs) {
@@ -58,6 +58,7 @@ export function exportCsv(d: LibraryData) {
         Término: r.finished_at ?? '',
         Ano: r.year ?? '',
         Nota: r.rating ?? '',
+        Favorito: r.favorite ? 'sim' : '',
         Formato: r.format ? FORMAT_SHORT[r.format] : '',
         Resenha: r.review ?? ''
       });

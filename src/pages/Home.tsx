@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HangingPlant } from '../components/Decor';
 import { Icon, type IconName } from '../components/Icon';
-import { Cover, Empty } from '../components/ui';
+import { Cover, Empty, Fav } from '../components/ui';
 import { availableYears, shelfInsights, shelfProgress, yearStats, type OpenSeries, type Suggestion, type VolumeState } from '../lib/stats';
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
@@ -482,7 +482,10 @@ export default function Home() {
                           <span className="eyebrow">Melhor nota</span>
                           <span className="serif hl-t">{s.best.book.title}</span>
                           {s.best.book.author && <span className="small muted hl-a">{s.best.book.author}</span>}
-                          <span className="small hl-m">{fmtRating(s.best.rating)} estrelas</span>
+                          <span className="small hl-m row" style={{ gap: 6 }}>
+                            {fmtRating(s.best.rating)} estrelas
+                            {s.finished.some((r) => r.book_id === s.best!.book.id && r.favorite) && <Fav size={14} />}
+                          </span>
                         </div>
                       </Link>
                     )}

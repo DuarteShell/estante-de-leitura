@@ -82,6 +82,35 @@ export function StarInput({ value, onChange, size = 38 }: { value: number | null
   );
 }
 
+/* ---------------- Favorito (coração) ---------------- */
+
+const HEART = 'M12 20s-7-4.5-9-9a4.5 4.5 0 0 1 9-3 4.5 4.5 0 0 1 9 3c-2 4.5-9 9-9 9z';
+
+function HeartShape({ size, on }: { size: number; on: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d={HEART} fill={on ? '#C95F4E' : '#F1E4D3'} stroke={on ? '#A3402A' : '#C9A894'} strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Coração preenchido pra exibir ao lado das estrelas */
+export function Fav({ size = 15 }: { size?: number }) {
+  return (
+    <span className="fav" role="img" aria-label="Favorito" title="Favorito">
+      <HeartShape size={size} on />
+    </span>
+  );
+}
+
+export function HeartInput({ value, onChange, size = 38 }: { value: boolean; onChange: (v: boolean) => void; size?: number }) {
+  return (
+    <button type="button" className={`heart-input${value ? ' on' : ''}`} aria-pressed={value} aria-label="Favorito" title={value ? 'Tirar dos favoritos' : 'Marcar como favorito'} onClick={() => onChange(!value)}>
+      <HeartShape size={size} on={value} />
+    </button>
+  );
+}
+
 /* ---------------- Chips ---------------- */
 
 export function ChipGroup<T extends string>({

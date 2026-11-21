@@ -4,7 +4,7 @@ import { BookForm } from '../components/BookForm';
 import { HeroLandscape } from '../components/Decor';
 import { Icon } from '../components/Icon';
 import { ReadingModal } from '../components/ReadingForm';
-import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, Modal, STATUS_OPTIONS, Stars, StatusPill } from '../components/ui';
+import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, Modal, STATUS_OPTIONS, Fav, Stars, StatusPill } from '../components/ui';
 import type { BookStatus, Reading, ReadingFormat } from '../lib/types';
 import { fmtDate, readingYear, seriesBooks, seriesPosition, seriesTotal } from '../lib/util';
 import { STATUS_DOT } from '../lib/types';
@@ -54,6 +54,7 @@ export default function BookDetail() {
   const active = mine.find((r) => r.status === 'lendo');
   const isLegacy = book.status === 'lido' && !mine.some((r) => r.status === 'lido');
   const lastRating = mine.find((r) => r.rating != null)?.rating ?? null;
+  const isFavorite = mine.some((r) => r.favorite);
   const bookQuotes = quotes.filter((q) => q.book_id === book.id);
   const pct = book.pages && book.current_page ? Math.min(100, Math.round((book.current_page / book.pages) * 100)) : 0;
 
@@ -138,7 +139,12 @@ export default function BookDetail() {
             </span>
           ))}
         </div>
-        {lastRating != null && <Stars value={lastRating} size={20} showNumber />}
+        {(lastRating != null || isFavorite) && (
+          <span className="row" style={{ gap: 8 }}>
+            {lastRating != null && <Stars value={lastRating} size={20} showNumber />}
+            {isFavorite && <Fav size={20} />}
+          </span>
+        )}
       </div>
 
       {seriesSection()}
@@ -242,6 +248,7 @@ export default function BookDetail() {
                   <div className="row wrap" style={{ gap: 6 }}>
                     <FormatPill format={r.format} />
                     {r.rating != null && <Stars value={r.rating} size={14} showNumber />}
+                    {r.favorite && <Fav size={14} />}
                   </div>
                   {r.review && <p className="small" style={{ margin: 0, whiteSpace: 'pre-line' }}>{r.review}</p>}
                 </div>

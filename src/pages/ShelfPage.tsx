@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { PottedPlant } from '../components/Decor';
 import { Icon } from '../components/Icon';
 import { Shelf } from '../components/Shelf';
-import { ChipGroup, Cover, Empty } from '../components/ui';
+import { ChipGroup, Cover, Empty, Fav } from '../components/ui';
 import { legacyBooks } from '../lib/stats';
 import type { Book, BookStatus } from '../lib/types';
 import { STATUS_DOT } from '../lib/types';
@@ -11,7 +11,7 @@ import { moveBlock, useDragReorder, type DropTarget } from '../lib/useDragReorde
 import { groupSeries, norm, seriesKey, seriesTag } from '../lib/util';
 import { useLibrary } from '../store/library';
 
-type Filter = 'todos' | BookStatus;
+type Filter = 'todos' | 'favoritos' | BookStatus;
 type Sort = 'manual' | 'recentes' | 'titulo' | 'autor' | 'genero' | 'saga' | 'leitura';
 const SORTS: { value: Sort; label: string }[] = [
   { value: 'manual', label: 'Minha ordem (arrastar)' },
@@ -25,11 +25,15 @@ const SORTS: { value: Sort; label: string }[] = [
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'todos', label: 'Todos' },
   { value: 'lido', label: 'Lidos' },
+  { value: 'favoritos', label: 'Favoritos' },
   { value: 'lendo', label: 'Lendo' },
   { value: 'nao_lido', label: 'Não lidos' },
   { value: 'abandonado', label: 'Abandonados' },
   { value: 'desejo', label: 'Desejos' }
 ];
+
+/** cor do coração de favorito */
+const FAV_DOT = '#C95F4E';
 
 /** preferências da estante que ficam salvas neste navegador */
 const pref = {
@@ -99,11 +103,16 @@ export default function ShelfPage() {
   }, [readings]);
 
   const legacyIds = useMemo(() => new Set(legacyBooks(books, readings).map((b) => b.id)), [books, readings]);
+  /** livros com alguma leitura marcada com coração */
+  const favIds = useMemo(() => new Set(readings.filter((r) => r.favorite).map((r) => r.book_id)), [readings]);
   const counts = useMemo(() => {
-    const c: Record<string, number> = { todos: books.length };
-    books.forEach((b) => (c[b.status] = (c[b.status] ?? 0) + 1));
+    const c: Record<string, number> = { todos: books.length, favoritos: 0 };
+    books.forEach((b) => {
+      c[b.status] = (c[b.status] ?? 0) + 1;
+      if (favIds.has(b.id)) c.favoritos += 1;
+    });
     return c;
-  }, [books]);
+  }, [books, favIds]);
 
   // desejos nunca são livros que eu tenho: o filtro não se aplica (e a preferência salva fica intacta)
   const ownedOnly = onlyOwned && filter !== 'desejo';
@@ -112,7 +121,7 @@ export default function ShelfPage() {
     const nq = norm(q);
     const out = books.filter(
       (b) =>
-        (filter === 'todos' || b.status === filter) &&
+        (filter === 'todos' || (filter === 'favoritos' ? favIds.has(b.id) : b.status === filter)) &&
         (!onlyLegacy || legacyIds.has(b.id)) &&
         (!ownedOnly || b.owned) &&
         (!nq || norm(b.title).includes(nq) || norm(b.author).includes(nq) || norm(b.series).includes(nq) || b.genres.some((g) => norm(g).includes(nq)))
@@ -135,7 +144,7 @@ export default function ShelfPage() {
     else out.sort((a, b) => b.created_at.localeCompare(a.created_at));
     // livros da mesma saga sempre juntos e em ordem (1, 2, 3…)
     return groupSeries(out);
-  }, [books, filter, onlyLegacy, ownedOnly, q, sort, legacyIds, lastRead]);
+  }, [books, filter, onlyLegacy, ownedOnly, q, sort, legacyIds, favIds, lastRead]);
 
   /** solta o livro arrastado: recalcula a ordem de TODA a estante (mesmo com filtro ativo) */
   const onReorder = (dragId: string, target: DropTarget) => {
@@ -207,7 +216,7 @@ export default function ShelfPage() {
         label="Status"
         value={filter}
         onChange={setFilter}
-        options={FILTERS.map((f) => ({ ...f, count: counts[f.value] ?? 0, dot: f.value === 'todos' ? undefined : STATUS_DOT[f.value] }))}
+        options={FILTERS.map((f) => ({ ...f, count: counts[f.value] ?? 0, dot: f.value === 'todos' ? undefined : f.value === 'favoritos' ? FAV_DOT : STATUS_DOT[f.value] }))}
       />
 
       <div className="row wrap small" style={{ gap: 16 }}>
@@ -260,7 +269,11 @@ export default function ShelfPage() {
             ) : undefined
           }
         >
-          {books.length === 0 ? 'A estante está vazia.' : 'Nenhum livro encontrado com esses filtros.'}
+          {books.length === 0
+            ? 'A estante está vazia.'
+            : filter === 'favoritos' && counts.favoritos === 0
+              ? 'Nenhum favorito ainda. Marque o coração ao lado das estrelas quando registrar ou editar uma leitura.'
+              : 'Nenhum livro encontrado com esses filtros.'}
         </Empty>
       ) : view === 'estante' ? (
         <>
@@ -286,7 +299,15 @@ export default function ShelfPage() {
               {...coverDrag.itemProps(b.id)}
             >
               <Cover book={b} width={104} className="cover-fluid" />
-              <span className="t">{b.title}</span>
+              <span className="t">
+                {b.title}
+                {favIds.has(b.id) && (
+                  <>
+                    {' '}
+                    <Fav size={13} />
+                  </>
+                )}
+              </span>
               {b.series && (
                 <span className="saga-tag">
                   {b.series} {seriesTag(b, books) ?? ''}

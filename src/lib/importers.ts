@@ -12,6 +12,7 @@ export type Field =
   | 'author'
   | 'cover'
   | 'rating'
+  | 'favorite'
   | 'started'
   | 'finished'
   | 'pages'
@@ -29,6 +30,7 @@ export const FIELD_LABEL: Record<Field, string> = {
   author: 'Autor(a)',
   cover: 'Capa (link)',
   rating: 'Nota',
+  favorite: 'Favorito',
   started: 'Data de início',
   finished: 'Data de término',
   pages: 'Total de páginas',
@@ -58,6 +60,7 @@ const SYNONYMS: [Field, string[]][] = [
   ['author', ['autor', 'autora', 'author', 'authors', 'autores', 'autor a', 'escritor', 'escritora']],
   ['cover', ['capa', 'cover', 'imagem', 'image', 'cover url', 'foto']],
   ['rating', ['nota', 'rating', 'my rating', 'star rating', 'avaliacao', 'estrelas', 'stars', 'minha nota']],
+  ['favorite', ['favorito', 'favorita', 'favorite', 'favourite', 'fav', 'coracao']],
   ['started', ['inicio', 'data de inicio', 'comecei', 'started', 'start date', 'date started', 'started reading']],
   [
     'finished',
@@ -252,6 +255,7 @@ export interface ImportReading {
   finished_at: string | null;
   year: number | null;
   rating: number | null;
+  favorite?: boolean;
   format: ReadingFormat | null;
   pages_read: number | null;
   review: string | null;
@@ -318,7 +322,10 @@ export function normalizeFile(file: ParsedFile, opts: NormalizeOptions): ImportI
 
     const format = parseFormat(get(row, 'format')) ?? opts.defaultFormat;
     const readings: ImportReading[] = [];
-    const hasInfo = started || finished || year || rating != null || review;
+    // coluna "Favorito" (sim/x/true/1/♥) ou prateleira "favorites" do Goodreads
+    const favorite =
+      /^(sim|s|x|yes|y|true|1|♥|❤|❤️)$/i.test(get(row, 'favorite')) || /(^|[,;|]\s*)favou?rites?\s*($|[,;|])/i.test(get(row, 'genre'));
+    const hasInfo = started || finished || year || rating != null || review || favorite;
     if ((status === 'lido' || status === 'abandonado') && hasInfo) {
       readings.push({
         status,
@@ -326,6 +333,7 @@ export function normalizeFile(file: ParsedFile, opts: NormalizeOptions): ImportI
         finished_at: finished,
         year: finished || started ? null : year,
         rating,
+        ...(favorite ? { favorite: true } : {}),
         format,
         pages_read: status === 'lido' ? pagesRead ?? pages : pagesRead,
         review

@@ -75,8 +75,10 @@ create table if not exists public.readings (
   format      text check (format is null or format in ('fisico', 'kindle', 'audiobook', 'outro')),
   pages_read  int,
   review      text,
+  favorite    boolean not null default false,
   created_at  timestamptz not null default now()
 );
+alter table public.readings add column if not exists favorite boolean not null default false;
 create index if not exists readings_book_idx on public.readings (book_id);
 create index if not exists readings_user_idx on public.readings (user_id);
 

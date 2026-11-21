@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Vine } from '../components/Decor';
-import { ChipGroup, Cover, Empty, FormatPill, Stars } from '../components/ui';
+import { ChipGroup, Cover, Empty, FormatPill, Fav, Stars } from '../components/ui';
 import { availableYears, legacyBooks, yearStats } from '../lib/stats';
 import type { ReadingFormat } from '../lib/types';
 import { fmtDate, fmtNum, fmtRating, readingYear } from '../lib/util';
@@ -92,7 +92,12 @@ export default function Readings() {
               <div className="stack grow" style={{ gap: 5 }}>
                 <span className="t">{b.title}</span>
                 <span className="small muted">{b.author ?? 'Autor desconhecido'}</span>
-                {r.rating != null && <Stars value={r.rating} showNumber />}
+                {(r.rating != null || r.favorite) && (
+                  <span className="row" style={{ gap: 6 }}>
+                    {r.rating != null && <Stars value={r.rating} showNumber />}
+                    {r.favorite && <Fav />}
+                  </span>
+                )}
                 <div className="row wrap" style={{ gap: 6 }}>
                   <FormatPill format={r.format} />
                   {b.genres.slice(0, 2).map((g) => (
