@@ -105,13 +105,16 @@ export default function ShelfPage() {
     return c;
   }, [books]);
 
+  // desejos nunca são livros que eu tenho: o filtro não se aplica (e a preferência salva fica intacta)
+  const ownedOnly = onlyOwned && filter !== 'desejo';
+
   const list = useMemo(() => {
     const nq = norm(q);
     const out = books.filter(
       (b) =>
         (filter === 'todos' || b.status === filter) &&
         (!onlyLegacy || legacyIds.has(b.id)) &&
-        (!onlyOwned || b.owned) &&
+        (!ownedOnly || b.owned) &&
         (!nq || norm(b.title).includes(nq) || norm(b.author).includes(nq) || norm(b.series).includes(nq) || b.genres.some((g) => norm(g).includes(nq)))
     );
     const byTitle = (a: Book, b: Book) => a.title.localeCompare(b.title, 'pt-BR');
@@ -132,7 +135,7 @@ export default function ShelfPage() {
     else out.sort((a, b) => b.created_at.localeCompare(a.created_at));
     // livros da mesma saga sempre juntos e em ordem (1, 2, 3…)
     return groupSeries(out);
-  }, [books, filter, onlyLegacy, onlyOwned, q, sort, legacyIds, lastRead]);
+  }, [books, filter, onlyLegacy, ownedOnly, q, sort, legacyIds, lastRead]);
 
   /** solta o livro arrastado: recalcula a ordem de TODA a estante (mesmo com filtro ativo) */
   const onReorder = (dragId: string, target: DropTarget) => {
@@ -209,7 +212,7 @@ export default function ShelfPage() {
 
       <div className="row wrap small" style={{ gap: 16 }}>
         <label className="check">
-          <input type="checkbox" checked={onlyOwned} onChange={(e) => setOnlyOwned(e.target.checked)} />
+          <input type="checkbox" checked={ownedOnly} disabled={filter === 'desejo'} onChange={(e) => setOnlyOwned(e.target.checked)} />
           Só os que tenho
         </label>
         {onlyLegacy && (
