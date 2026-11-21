@@ -172,7 +172,7 @@ export default function ShelfPage() {
   const owned = books.filter((b) => b.owned && b.status !== 'desejo').length;
 
   return (
-    <div className="stack lg">
+    <div className="page">
       <header className="page-head">
         <div>
           <h1>{filter === 'desejo' ? 'Lista de desejos' : 'Minha estante'}</h1>

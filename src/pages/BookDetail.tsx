@@ -103,7 +103,7 @@ export default function BookDetail() {
   };
 
   return (
-    <div className="stack lg" style={{ maxWidth: 820, margin: '0 auto' }}>
+    <div className="page narrow">
       <div className="hero">
         <HeroLandscape />
         <button className="icon-btn" style={{ position: 'absolute', top: 'max(20px, env(safe-area-inset-top))', left: 18, background: 'rgba(251,248,239,0.9)', border: 'none' }} onClick={() => nav(-1)} aria-label="Voltar">

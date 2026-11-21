@@ -81,12 +81,12 @@ export default function AddBook() {
   };
 
   return (
-    <div className="stack lg" style={{ maxWidth: 640 }}>
-      <header className="row" style={{ gap: 12 }}>
+    <div className="page narrow">
+      <header className="page-head back">
         <button className="icon-btn" onClick={() => (draft ? reset() : nav(-1))} aria-label="Voltar">
           <Icon name="back" size={20} />
         </button>
-        <h1 style={{ fontSize: 28 }}>Adicionar livro</h1>
+        <h1>Adicionar livro</h1>
       </header>
 
       {!draft && (

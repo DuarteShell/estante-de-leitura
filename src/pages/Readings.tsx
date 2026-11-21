@@ -36,7 +36,7 @@ export default function Readings() {
     });
 
   return (
-    <div className="stack lg">
+    <div className="page">
       <header className="page-head">
         <div>
           <h1>Minhas leituras</h1>

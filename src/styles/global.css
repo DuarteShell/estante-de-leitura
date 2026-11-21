@@ -44,7 +44,7 @@ button { cursor: pointer; }
 img { display: block; max-width: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; line-height: 1.15; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; line-height: 1.15; overflow-wrap: break-word; }
 h1 { font-size: 32px; }
 h2 { font-size: 21px; }
 h3 { font-size: 17px; }
@@ -62,7 +62,10 @@ h3 { font-size: 17px; }
 
 /* ---------------- layout ---------------- */
 .app { min-height: 100vh; }
-.main { padding: max(28px, env(safe-area-inset-top)) 18px 120px; max-width: 1180px; margin: 0 auto; position: relative; }
+.main { padding: max(28px, env(safe-area-inset-top)) 18px 120px; width: 100%; max-width: 1180px; margin: 0 auto; position: relative; }
+/* páginas: largas ocupam a área toda; as de foco (livro, formulários) ficam centralizadas com largura fixa */
+.page { display: flex; flex-direction: column; gap: 22px; width: 100%; min-width: 0; }
+.page.narrow { max-width: 760px; margin: 0 auto; }
 .sidebar { display: none; }
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
@@ -111,7 +114,8 @@ h3 { font-size: 17px; }
 .card.tan { background: var(--tan); border-color: transparent; box-shadow: none; }
 .divider { height: 1px; background: var(--line); border: 0; margin: 0; }
 
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 20px; position: relative; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; position: relative; }
+.page-head.back { justify-content: flex-start; align-items: center; }
 .page-head .sub { font-size: 15px; color: var(--ink-2); margin-top: 4px; }
 
 .grid { display: grid; gap: 14px; }
@@ -432,3 +436,4 @@ body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; 
 }
 .hl-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; }
 @media (min-width: 700px) { .hl-tile.wide { grid-column: auto; } }
+

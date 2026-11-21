@@ -164,7 +164,7 @@ export default function Home() {
   const dateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="stack lg">
+    <div className="page">
       <header className="page-head" style={{ minHeight: 120, alignItems: 'flex-start' }}>
         <div style={{ paddingRight: 110 }}>
           <span className="eyebrow">{dateLabel}</span>

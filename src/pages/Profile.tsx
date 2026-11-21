@@ -30,7 +30,7 @@ export default function Profile() {
 
   if (!canEdit) {
     return (
-      <div className="stack lg" style={{ maxWidth: 640 }}>
+      <div className="page narrow">
         <header className="page-head">
           <div>
             <h1>{siteTitle}</h1>
@@ -58,7 +58,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="stack lg" style={{ maxWidth: 640 }}>
+    <div className="page narrow">
       <header className="page-head">
         <div>
           <h1>Perfil e dados</h1>

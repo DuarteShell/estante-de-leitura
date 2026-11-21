@@ -180,13 +180,13 @@ export default function Import() {
   }
 
   return (
-    <div className="stack lg" style={{ maxWidth: 900 }}>
-      <header className="row" style={{ gap: 12 }}>
+    <div className="page narrow">
+      <header className="page-head back">
         <button className="icon-btn" onClick={() => nav(-1)} aria-label="Voltar">
           <Icon name="back" size={20} />
         </button>
         <div>
-          <h1 style={{ fontSize: 28 }}>Importar</h1>
+          <h1>Importar</h1>
           <p className="small muted" style={{ margin: 0 }}>Notion, Goodreads, StoryGraph, qualquer CSV ou um backup .json</p>
         </div>
       </header>
