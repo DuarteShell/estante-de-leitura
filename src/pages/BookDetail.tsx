@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon';
 import { ReadingModal } from '../components/ReadingForm';
 import { ProgressTracker } from '../components/ProgressTracker';
 import { progressMode } from '../lib/progress';
-import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, Modal, STATUS_OPTIONS, Fav, Stars, StatusPill } from '../components/ui';
+import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, HeartInput, Modal, STATUS_OPTIONS, Fav, StarInput, Stars, StatusPill } from '../components/ui';
 import type { BookStatus, Reading, ReadingFormat } from '../lib/types';
 import { fmtDate, readingYear, seriesBooks, seriesPosition, seriesTotal } from '../lib/util';
 import { STATUS_DOT } from '../lib/types';
@@ -17,6 +17,7 @@ type Dialog =
   | { kind: 'edit' }
   | { kind: 'finish'; status: 'lido' | 'abandonado' }
   | { kind: 'legacy-choice' }
+  | { kind: 'legacy-rating' }
   | { kind: 'add-reading' }
   | { kind: 'edit-reading'; reading: Reading }
   | { kind: 'start' }
@@ -54,7 +55,9 @@ export default function BookDetail() {
     .filter((r) => r.book_id === book.id)
     .sort((a, b) => (b.finished_at ?? b.started_at ?? String(b.year ?? '')).localeCompare(a.finished_at ?? a.started_at ?? String(a.year ?? '')));
   const active = mine.find((r) => r.status === 'lendo');
-  const isLegacy = book.status === 'lido' && !mine.some((r) => r.status === 'lido');
+  const isLegacy = book.status === 'lido' && !mine.some((r) => r.status === 'lido' && readingYear(r) != null);
+  // leitura sem data que guarda só a nota/favorito de um livro legado
+  const legacyReading = isLegacy ? mine.find((r) => r.status === 'lido') : undefined;
   const lastRating = mine.find((r) => r.rating != null)?.rating ?? null;
   const isFavorite = mine.some((r) => r.favorite);
   const bookQuotes = quotes.filter((q) => q.book_id === book.id);
@@ -239,12 +242,17 @@ export default function BookDetail() {
         <section className="card flat stack" style={{ background: 'var(--tan)', border: 'none' }}>
           <span className="eyebrow">Lido sem registro</span>
           <p className="small" style={{ margin: 0 }}>
-            Esse livro conta como lido, mas não tem data, nota nem formato — por isso fica fora das estatísticas por ano.
+            Esse livro conta como lido, mas não tem data nem formato — por isso fica fora das estatísticas por ano. Dá para dar nota mesmo assim.
           </p>
           {canEdit && (
-            <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setDialog({ kind: 'add-reading' })}>
-              Registrar detalhes da leitura
-            </button>
+            <div className="row wrap" style={{ gap: 8 }}>
+              <button className="btn btn-sm" onClick={() => setDialog({ kind: 'legacy-rating' })}>
+                {legacyReading?.rating != null || legacyReading?.favorite ? 'Mudar nota' : 'Dar nota'}
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setDialog({ kind: 'add-reading' })}>
+                Registrar detalhes da leitura
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -406,6 +414,18 @@ export default function BookDetail() {
         </Modal>
       )}
 
+      {dialog?.kind === 'legacy-rating' && (
+        <LegacyRatingModal
+          initial={legacyReading}
+          onSave={(rating, favorite) =>
+            legacyReading
+              ? lib.updateReading(legacyReading.id, { rating, favorite })
+              : lib.addReading(book.id, { status: 'lido', rating, favorite })
+          }
+          onClose={() => setDialog(null)}
+        />
+      )}
+
       {dialog?.kind === 'add-reading' && (
         <ReadingModal title="Registrar leitura" initial={{ status: 'lido' }} statuses={['lido', 'abandonado']} onSave={(r) => lib.addReading(book.id, r)} onClose={() => setDialog(null)} />
       )}
@@ -463,5 +483,51 @@ export default function BookDetail() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Nota/favorito de uma leitura legado, sem pedir datas nem formato. */
+function LegacyRatingModal({
+  initial,
+  onSave,
+  onClose
+}: {
+  initial?: Reading;
+  onSave: (rating: number | null, favorite: boolean) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [rating, setRating] = useState<number | null>(initial?.rating ?? null);
+  const [favorite, setFavorite] = useState(!!initial?.favorite);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title="Nota da leitura" onClose={onClose}>
+      <form
+        className="stack lg"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          try {
+            await onSave(rating, favorite);
+            onClose();
+          } catch {
+            setBusy(false);
+          }
+        }}
+      >
+        <p className="small muted" style={{ margin: 0 }}>
+          Fica guardada sem data: conta nos favoritos e nas sugestões, mas não nas estatísticas por ano.
+        </p>
+        <div className="rating-row">
+          <StarInput value={rating} onChange={setRating} />
+          <div className="stack" style={{ gap: 6, alignItems: 'center' }}>
+            <HeartInput value={favorite} onChange={setFavorite} />
+            <span className="tiny muted">{favorite ? 'Favorito' : 'Favoritar'}</span>
+          </div>
+        </div>
+        <button className="btn btn-primary btn-block" disabled={busy}>
+          {busy ? 'Salvando…' : 'Salvar'}
+        </button>
+      </form>
+    </Modal>
   );
 }

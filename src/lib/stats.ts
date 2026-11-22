@@ -94,17 +94,23 @@ export function availableYears(readings: Reading[]): number[] {
 }
 
 /** livros marcados como lidos que não têm nenhuma leitura registrada */
+/** Leitura legado: livro lido sem leitura datada. Pode ter uma leitura sem data
+ *  só para guardar nota/favorito — ela não entra nas contas por ano. */
 export function legacyBooks(books: Book[], readings: Reading[]) {
-  const withReading = new Set(readings.filter((r) => r.status === 'lido').map((r) => r.book_id));
+  const withReading = new Set(readings.filter((r) => r.status === 'lido' && readingYear(r) != null).map((r) => r.book_id));
   return books.filter((b) => b.status === 'lido' && !withReading.has(b.id));
 }
 
-/** Quanto da estante (livros que tenho, fora desejos) já foi lido. */
+/** Quanto da estante (livros que tenho, fora desejos) já foi lido.
+ *  Lendo e abandonados contam como não lidos: só saem da pilha quando terminados. */
 export function shelfProgress(books: Book[]) {
   const shelf = books.filter((b) => b.owned && b.status !== 'desejo');
   const read = shelf.filter((b) => b.status === 'lido').length;
-  const unread = shelf.filter((b) => b.status === 'nao_lido').length;
-  return { total: shelf.length, read, unread, pct: shelf.length ? Math.round((read / shelf.length) * 100) : 0 };
+  const unread = shelf.length - read;
+  /** só os que nem foram começados (base das sugestões "pra ler a seguir") */
+  const notStarted = shelf.filter((b) => b.status === 'nao_lido').length;
+  const inProgress = shelf.filter((b) => b.status === 'lendo').length;
+  return { total: shelf.length, read, unread, notStarted, inProgress, pct: shelf.length ? Math.round((read / shelf.length) * 100) : 0 };
 }
 
 /* ---------- Leitura da estante: ritmo, sagas e sugestões ---------- */
@@ -150,7 +156,9 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   const monthsElapsed = now.getMonth() + now.getDate() / 31;
   const pace = finishedThisYear.length / Math.max(1, monthsElapsed);
   const unread = books.filter((b) => b.owned && b.status === 'nao_lido');
-  const monthsToClear = pace > 0 && unread.length ? Math.ceil(unread.length / pace) : null;
+  // pilha = tudo da estante que ainda não foi terminado (lendo e abandonados inclusos)
+  const pile = books.filter((b) => b.owned && b.status !== 'desejo' && b.status !== 'lido').length;
+  const monthsToClear = pace > 0 && pile ? Math.ceil(pile / pace) : null;
 
   // gosto: leituras do ano; se forem poucas, usa o histórico todo (notas pesam)
   let base = finishedThisYear;
@@ -256,7 +264,8 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
 
 /* ---------- Perfil de leitor: um ano ou o histórico todo ---------- */
 
-export type Period = number | 'all';
+/** um ano, o histórico todo (com legado) ou só as leituras legado */
+export type Period = number | 'all' | 'legado';
 
 export type AxisKey = 'ritmo' | 'folego' | 'variedade' | 'constancia' | 'sagas' | 'descoberta';
 
@@ -279,6 +288,8 @@ export interface Ranked {
 export interface ReaderProfile {
   period: Period;
   books: number;
+  /** quantas leituras legado (sem data) entraram nas contas */
+  legacy: number;
   pages: number;
   audiobooks: number;
   /** livros por mês no período (até hoje, se for o ano corrente) */
@@ -324,14 +335,45 @@ const fmt1 = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 1
 
 export function readerProfile(period: Period, books: Book[], readings: Reading[], now = new Date()): ReaderProfile {
   const byId = new Map(books.map((b) => [b.id, b]));
-  const allFinished = readings.filter((r) => r.status === 'lido' && byId.has(r.book_id)).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  // leituras com data (ou ano); as sem data são tratadas como legado logo abaixo
+  const allFinished = readings.filter((r) => r.status === 'lido' && byId.has(r.book_id) && readingYear(r) != null).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
   const inPeriod = (r: Reading) => period === 'all' || readingYear(r) === period;
-  const finished = allFinished.filter(inPeriod);
-  const abandoned = readings.filter((r) => r.status === 'abandonado' && inPeriod(r)).length;
+  const datedFinished = period === 'legado' ? [] : allFinished.filter(inPeriod);
+  const abandoned = period === 'legado' ? 0 : readings.filter((r) => r.status === 'abandonado' && inPeriod(r)).length;
   const thisYear = now.getFullYear();
 
-  // primeira leitura de cada autor no histórico → "descoberta"
+  // legado: livros lidos sem leitura datada. Nota/favorito vêm de uma leitura sem data, se houver.
+  // Entram no montante (livros, páginas, gêneros, autores, sagas); nota só se tiver.
+  // Formato: na estante = físico; fora dela, não entra nos formatos.
+  // Nunca em ritmo, constância, tempo de leitura ou livros por ano.
+  const legacyList = legacyBooks(books, readings);
+  const legacyEntries: Reading[] = legacyList.map((b) => {
+    const undated = readings.filter((r) => r.book_id === b.id && r.status === 'lido');
+    return {
+      id: `legado:${b.id}`,
+      book_id: b.id,
+      status: 'lido',
+      started_at: null,
+      finished_at: null,
+      year: null,
+      rating: undated.find((r) => r.rating != null)?.rating ?? null,
+      favorite: undated.some((r) => r.favorite),
+      format: undated.find((r) => r.format)?.format ?? (b.owned ? 'fisico' : null),
+      pages_read: null,
+      review: null,
+      created_at: b.created_at
+    } as Reading;
+  });
+  const legacyIds = new Set(legacyEntries.map((r) => r.id));
+  const usesLegacy = period === 'all' || period === 'legado';
+  const finished = usesLegacy ? [...datedFinished, ...legacyEntries] : datedFinished;
+  /** leituras com data no período: base de ritmo, formatos, descoberta e afins */
+  const nDated = datedFinished.length;
+
+  // primeira leitura de cada autor no histórico → "descoberta".
+  // Autores do legado já eram conhecidos antes do primeiro ano registrado.
   const firstOfAuthor = new Map<string, string>();
+  for (const b of legacyList) if (b.author) firstOfAuthor.set(norm(b.author), 'legado');
   for (const r of allFinished) {
     const a = byId.get(r.book_id)?.author;
     if (a && !firstOfAuthor.has(norm(a))) firstOfAuthor.set(norm(a), r.id);
@@ -362,7 +404,8 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
     const b = byId.get(r.book_id)!;
     const audio = r.format === 'audiobook';
     const p = r.pages_read ?? b.pages ?? 0;
-    formats[r.format ?? 'nd'] += 1;
+    // legado sem formato (fora da estante) não entra nos formatos
+    if (!legacyIds.has(r.id) || r.format) formats[r.format ?? 'nd'] += 1;
     if (r.finished_at) months.add(r.finished_at.slice(0, 7));
     b.genres.forEach((g) => genres.set(g, (genres.get(g) ?? 0) + 1));
     if (b.author) {
@@ -405,7 +448,8 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
 
   // período em meses: ano fechado = 12; ano corrente = até hoje; histórico = da primeira leitura até hoje
   let spanMonths = 12;
-  if (period === thisYear) spanMonths = now.getMonth() + now.getDate() / 31;
+  if (period === 'legado') spanMonths = 1;
+  else if (period === thisYear) spanMonths = now.getMonth() + now.getDate() / 31;
   else if (period === 'all' && allFinished.length) {
     const first = allFinished[0];
     const fy = Number((first.finished_at ?? `${readingYear(first) ?? thisYear}-01`).slice(0, 4));
@@ -413,7 +457,7 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
     spanMonths = (thisYear - fy) * 12 + now.getMonth() - fm + now.getDate() / 31;
   }
   spanMonths = Math.max(1, spanMonths);
-  const perMonth = finished.length / spanMonths;
+  const perMonth = nDated / spanMonths;
 
   const sortMap = (m: Map<string, number>) =>
     [...m.entries()].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'pt-BR'));
@@ -430,7 +474,7 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
 
   const avgPages = pagedBooks ? paged / pagedBooks : null;
   const n = finished.length;
-  const datedShare = n ? finished.filter((r) => r.finished_at).length / n : 0;
+  const datedShare = nDated ? datedFinished.filter((r) => r.finished_at).length / nDated : 0;
   const activeSpan = Math.max(1, Math.ceil(spanMonths));
   const constancy = datedShare >= 0.5 ? months.size / activeSpan : null;
 
@@ -473,11 +517,13 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
     {
       key: 'descoberta',
       label: 'Descoberta',
-      value: pct(newAuthors, n),
-      detail: `${newAuthors} ${newAuthors === 1 ? 'autor novo' : 'autores novos'} (${pct(newAuthors, n)}%)`,
-      hint: 'Leituras de autores que você nunca tinha lido antes.'
+      value: pct(newAuthors, nDated),
+      detail: `${newAuthors} ${newAuthors === 1 ? 'autor novo' : 'autores novos'} (${pct(newAuthors, nDated)}%)`,
+      hint: 'Leituras de autores que você nunca tinha lido antes (quem está no legado já conta como conhecido).'
     }
   ];
+  // no legado não há datas: ritmo, constância e descoberta não se aplicam
+  const shownAxes = period === 'legado' ? axes.filter((a) => a.key !== 'ritmo' && a.key !== 'constancia' && a.key !== 'descoberta') : axes;
 
   // traços: frases curtas que resumem o jeito de ler
   const traits: string[] = [];
@@ -488,15 +534,16 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
   if (avgPages && avgPages >= 420) traits.push('Não foge de tijolão');
   else if (avgPages && avgPages <= 220 && pagedBooks >= 3) traits.push('Prefere livros curtos');
   if (n >= 4 && inSeries / n >= 0.4) traits.push('Devora sagas');
-  if (n >= 4 && newAuthors / n >= 0.6) traits.push('Sempre descobrindo autores');
-  else if (n >= 6 && newAuthors / n <= 0.25) traits.push('Fiel aos autores favoritos');
+  if (nDated >= 4 && newAuthors / nDated >= 0.6) traits.push('Sempre descobrindo autores');
+  else if (nDated >= 6 && newAuthors / nDated <= 0.25) traits.push('Fiel aos autores favoritos');
   if (constancy != null && constancy >= 0.8 && activeSpan >= 4) traits.push('Leitura o ano todo');
   if (rated >= 4 && ratingSum / rated >= 4.3) traits.push('Dá nota alta fácil');
   else if (rated >= 4 && ratingSum / rated <= 3.2) traits.push('Difícil de agradar');
-  if (n >= 4 && formats.audiobook / n >= 0.3) traits.push('Ouve livros');
-  if (n >= 4 && formats.kindle / n >= 0.5) traits.push('Leitura digital');
-  if (n + abandoned >= 6 && abandoned / (n + abandoned) >= 0.15) traits.push('Larga o que não agrada');
-  else if (n >= 10 && abandoned === 0) traits.push('Termina o que começa');
+  const nFormat = Object.values(formats).reduce((a, b) => a + b, 0);
+  if (nFormat >= 4 && formats.audiobook / nFormat >= 0.3) traits.push('Ouve livros');
+  if (nFormat >= 4 && formats.kindle / nFormat >= 0.5) traits.push('Leitura digital');
+  if (nDated + abandoned >= 6 && abandoned / (nDated + abandoned) >= 0.15) traits.push('Larga o que não agrada');
+  else if (nDated >= 10 && abandoned === 0) traits.push('Termina o que começa');
 
   const byYear: ReaderProfile['byYear'] = [];
   if (period === 'all' && allFinished.length) {
@@ -507,6 +554,7 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
   return {
     period,
     books: n,
+    legacy: usesLegacy ? legacyEntries.length : 0,
     pages,
     audiobooks: formats.audiobook,
     perMonth,
@@ -522,7 +570,7 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
     sizes,
     formats,
     byYear,
-    axes,
+    axes: shownAxes,
     traits: traits.slice(0, 5),
     records: rec
   };

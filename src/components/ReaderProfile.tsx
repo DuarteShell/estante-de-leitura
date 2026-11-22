@@ -160,7 +160,8 @@ export function ReaderProfile() {
   const all = useMemo(() => readerProfile('all', books, readings), [books, readings]);
   const prev = useMemo(() => (typeof period === 'number' ? readerProfile(period - 1, books, readings) : null), [period, books, readings]);
   const compare = typeof period === 'number' && all.books >= 3 ? all : null;
-  const periodLabel = period === 'all' ? 'Geral' : String(period);
+  const periodLabel = period === 'all' ? 'Geral' : period === 'legado' ? 'Legado' : String(period);
+  const isLegacy = period === 'legado';
 
   if (!all.books) {
     return <Empty>Quando houver leituras terminadas, o perfil de leitor aparece aqui: ritmo, gêneros, notas, recordes…</Empty>;
@@ -178,6 +179,7 @@ export function ReaderProfile() {
   const otherGenres = p.genres.slice(6).reduce((a, g) => a + g.n, 0);
   const ratedCount = p.ratings.reduce((a, b) => a + b, 0);
   const sizedCount = p.sizes.reduce((a, b) => a + b, 0);
+  const formatTotal = (Object.values(p.formats) as number[]).reduce((a, b) => a + b, 0);
   const formatRows = (Object.keys(FORMAT_SHORT) as ReadingFormat[])
     .map((f) => ({ name: FORMAT_SHORT[f], n: p.formats[f] }))
     .concat(p.formats.nd ? [{ name: 'Sem formato', n: p.formats.nd }] : [])
@@ -188,12 +190,24 @@ export function ReaderProfile() {
   return (
     <div className="stack lg">
       <div className="chips scroll" role="group" aria-label="Período">
-        {(['all', ...years] as Period[]).map((y) => (
+        {(['all', ...years, ...(all.legacy ? ['legado'] : [])] as Period[]).map((y) => (
           <button key={y} className={`chip ${period === y ? 'on' : ''}`} aria-pressed={period === y} onClick={() => setPeriod(y)}>
-            {y === 'all' ? 'Geral' : y}
+            {y === 'all' ? 'Geral' : y === 'legado' ? 'Legado' : y}
           </button>
         ))}
       </div>
+
+      {period === 'all' && p.legacy > 0 && (
+        <span className="tip">
+          <Icon name="leaf" size={16} /> Inclui {plural(p.legacy, 'leitura legado', 'leituras legado')} (sem data) no total de livros, páginas, gêneros, autores e sagas — nas notas, quando
+          têm, e como físico nos formatos, se estão na estante. Ritmo, constância e tempo de leitura usam só as leituras com data.
+        </span>
+      )}
+      {isLegacy && (
+        <span className="tip">
+          <Icon name="leaf" size={16} /> Livros lidos antes de {years[years.length - 1] ?? thisYear}, sem data registrada. Sem datas, ritmo, constância e descoberta não se aplicam.
+        </span>
+      )}
 
       {!p.books ? (
         <Empty>Nenhuma leitura terminada em {periodLabel}.</Empty>
@@ -202,7 +216,7 @@ export function ReaderProfile() {
           <section className="card stack" style={{ gap: 16 }}>
             <div className="row between wrap" style={{ gap: 8 }}>
               <div>
-                <span className="eyebrow">Perfil de leitura · {period === 'all' ? 'todo o histórico' : period}</span>
+                <span className="eyebrow">Perfil de leitura · {period === 'all' ? 'todo o histórico' : isLegacy ? 'leituras legado' : period}</span>
                 <h2 style={{ marginTop: 4 }}>
                   {p.genres[0] ? `Leitura de ${p.genres[0].name.toLowerCase()}` : `Leituras de ${displayName}`}
                   {p.genres[1] ? ` e ${p.genres[1].name.toLowerCase()}` : ''}
@@ -274,19 +288,19 @@ export function ReaderProfile() {
           <div className="ptiles">
             <Tile value={fmtNum(p.books)} label={p.books === 1 ? 'livro lido' : 'livros lidos'} delta={delta(p.books, prev?.books)} />
             <Tile value={fmtNum(p.pages)} label="páginas" delta={delta(p.pages, prev?.pages)} />
-            <Tile value={fmt1(p.perMonth)} label="livros por mês" />
+            {!isLegacy && <Tile value={fmt1(p.perMonth)} label="livros por mês" />}
             <Tile value={p.avgRating == null ? '—' : fmtRating(Math.round(p.avgRating * 10) / 10)} label="nota média" />
-            <Tile value={p.avgDays == null ? '—' : fmtNum(Math.round(p.avgDays))} label="dias por livro, em média" />
-            <Tile value={p.pagesPerDay == null ? '—' : fmtNum(Math.round(p.pagesPerDay))} label="páginas por dia lendo" />
-            <Tile value={fmtNum(p.authors)} label={p.authors === 1 ? 'autor' : 'autores diferentes'} delta={period !== 'all' && p.newAuthors ? `${p.newAuthors} ${p.newAuthors === 1 ? 'novo' : 'novos'}` : null} />
-            <Tile value={fmtNum(p.abandoned)} label={p.abandoned === 1 ? 'abandonado' : 'abandonados'} />
+            {!isLegacy && <Tile value={p.avgDays == null ? '—' : fmtNum(Math.round(p.avgDays))} label="dias por livro, em média" />}
+            {!isLegacy && <Tile value={p.pagesPerDay == null ? '—' : fmtNum(Math.round(p.pagesPerDay))} label="páginas por dia lendo" />}
+            <Tile value={fmtNum(p.authors)} label={p.authors === 1 ? 'autor' : 'autores diferentes'} delta={typeof period === 'number' && p.newAuthors ? `${p.newAuthors} ${p.newAuthors === 1 ? 'novo' : 'novos'}` : null} />
+            {!isLegacy && <Tile value={fmtNum(p.abandoned)} label={p.abandoned === 1 ? 'abandonado' : 'abandonados'} />}
           </div>
 
           {yearCols.length > 1 && (
             <section className="card stack">
               <div className="row between">
                 <span className="eyebrow">Livros por ano</span>
-                <span className="tiny muted">média de {fmt1(p.books / yearCols.length)} por ano</span>
+                <span className="tiny muted">média de {fmt1(yearCols.reduce((a, y) => a + y.n, 0) / yearCols.length)} por ano{p.legacy ? ' · sem o legado' : ''}</span>
               </div>
               <Columns data={yearCols.map((y) => ({ label: String(y.year).slice(-2) === String(thisYear).slice(-2) ? String(y.year) : `’${String(y.year).slice(-2)}`, n: y.n, title: `${y.year}: ${plural(y.n, 'livro', 'livros')}` }))} highlight={yearCols.length - 1} />
             </section>
@@ -318,13 +332,13 @@ export function ReaderProfile() {
             {formatRows.length > 0 && (
               <section className="card stack">
                 <span className="eyebrow">Formatos</span>
-                <Meters rows={formatRows} max={p.books} unit={(n) => `${Math.round((n / p.books) * 100)}%`} />
+                <Meters rows={formatRows} max={formatTotal} unit={(n) => `${Math.round((n / formatTotal) * 100)}%`} />
               </section>
             )}
           </div>
 
           <section className="card stack">
-            <span className="eyebrow">Recordes {period === 'all' ? 'de todos os tempos' : `de ${period}`}</span>
+            <span className="eyebrow">Recordes {period === 'all' ? 'de todos os tempos' : isLegacy ? 'do legado' : `de ${period}`}</span>
             <div className="records">
               {r.favorite && <Record base={base} label="Nota mais alta" book={r.favorite.book} detail={`${fmtRating(r.favorite.rating)} ★`} />}
               {r.longest && <Record base={base} label="Mais longo" book={r.longest} detail={`${fmtNum(r.longest.pages ?? 0)} páginas`} />}

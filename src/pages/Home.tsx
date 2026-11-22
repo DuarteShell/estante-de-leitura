@@ -137,7 +137,7 @@ export default function Home() {
   };
   const shelfPct = useMemo(() => shelfProgress(books), [books]);
   const insights = useMemo(() => shelfInsights(books, readings), [books, readings]);
-  const picks = shelfPct.unread > 0 ? insights.suggestions : insights.wishSuggestions;
+  const picks = shelfPct.notStarted > 0 ? insights.suggestions : insights.wishSuggestions;
   const goal = profile?.annual_goal ?? null;
   const goalInfo = useMemo(() => {
     if (!goal || year !== thisYear) return null;
@@ -246,7 +246,7 @@ export default function Home() {
                     <Ring pct={shelfPct.pct} />
                     <div className="kpis">
                       <Kpi icon="check" value={String(shelfPct.read)} label={`de ${shelfPct.total} lidos`} bg="#E3E8D5" fg="#4F6B47" />
-                      <Kpi icon="book" value={String(shelfPct.unread)} label="esperando leitura" bg="#F1E4D3" fg="#7A5235" />
+                      <Kpi icon="book" value={String(shelfPct.unread)} label={`esperando leitura${shelfPct.inProgress ? ` · ${shelfPct.inProgress} ${shelfPct.inProgress === 1 ? 'leitura' : 'leituras'} em andamento` : ''}`} bg="#F1E4D3" fg="#7A5235" />
                       <Kpi
                         icon="flag"
                         value={shelfPct.unread === 0 ? 'Zerou!' : insights.monthsToClear ? duration(insights.monthsToClear) : '—'}
@@ -282,14 +282,14 @@ export default function Home() {
               <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
                 {picks.length > 0 && (
                   <div className="stack pick-col">
-                    <span className="eyebrow">{shelfPct.unread > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
+                    <span className="eyebrow">{shelfPct.notStarted > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
                     <div className="pick-grid">
                       {picks.map((p) => (
                         <PickCard key={p.book.id} s={p} base={base} />
                       ))}
                     </div>
-                    <Link to={`${base}/estante?f=${shelfPct.unread > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
-                      {shelfPct.unread > 0 ? `ver os ${shelfPct.unread} não lidos` : 'ver lista de desejos'} →
+                    <Link to={`${base}/estante?f=${shelfPct.notStarted > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
+                      {shelfPct.notStarted > 0 ? `ver os ${shelfPct.notStarted} não lidos` : 'ver lista de desejos'} →
                     </Link>
                   </div>
                 )}
