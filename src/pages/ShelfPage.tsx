@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PottedPlant } from '../components/Decor';
 import { Icon } from '../components/Icon';
 import { Shelf } from '../components/Shelf';
 import { ChipGroup, Cover, Empty, Fav } from '../components/ui';
 import { legacyBooks } from '../lib/stats';
-import type { Book, BookStatus } from '../lib/types';
+import type { Book, BookStatus, ShelfDecor } from '../lib/types';
 import { STATUS_DOT } from '../lib/types';
 import { moveBlock, useDragReorder, type DropTarget } from '../lib/useDragReorder';
 import { groupSeries, norm, seriesKey, seriesTag } from '../lib/util';
@@ -58,7 +58,7 @@ const manualOrder = (a: Book, b: Book) =>
   (a.shelf_position ?? Number.MAX_SAFE_INTEGER) - (b.shelf_position ?? Number.MAX_SAFE_INTEGER) || a.created_at.localeCompare(b.created_at);
 
 export default function ShelfPage() {
-  const { books, readings, canEdit, base, reorderBooks } = useLibrary();
+  const { books, readings, canEdit, base, reorderBooks, profile, saveProfile } = useLibrary();
   const [params, setParams] = useSearchParams();
   const filter = (params.get('f') as Filter) || 'todos';
   const onlyLegacy = params.get('legado') === '1';
@@ -70,6 +70,30 @@ export default function ShelfPage() {
     pref.set('tenho', v ? '1' : '0');
   };
   const [arranging, setArranging] = useState(false);
+  const [decorating, setDecorating] = useState(false);
+
+  /* enfeites: mudam na tela na hora e são salvos no perfil logo depois */
+  const [decorDraft, setDecorDraft] = useState<{ pid?: string; value: ShelfDecor | null } | null>(null);
+  const decor = decorDraft && decorDraft.pid === profile?.id ? decorDraft.value : profile?.shelf_decor ?? null;
+  const pendingDecor = useRef<{ value: ShelfDecor | null; timer: number } | null>(null);
+  const saveRef = useRef(saveProfile);
+  saveRef.current = saveProfile;
+  const flushDecor = useCallback(() => {
+    const p = pendingDecor.current;
+    if (!p) return;
+    window.clearTimeout(p.timer);
+    pendingDecor.current = null;
+    saveRef.current({ shelf_decor: p.value }).catch(() => {
+      /* o aviso de erro já aparece */
+    });
+  }, []);
+  const changeDecor = (value: ShelfDecor | null) => {
+    setDecorDraft({ pid: profile?.id, value });
+    if (pendingDecor.current) window.clearTimeout(pendingDecor.current.timer);
+    pendingDecor.current = { value, timer: window.setTimeout(flushDecor, 900) };
+  };
+  // saiu da página com algo por salvar: salva já
+  useEffect(() => flushDecor, [flushDecor]);
 
   // volta para o último filtro de status usado (a lista de desejos é uma página à parte, não entra)
   useEffect(() => {
@@ -174,6 +198,10 @@ export default function ShelfPage() {
   };
   const changeView = (v: 'estante' | 'capas') => {
     setView(v);
+    if (v !== 'estante') {
+      flushDecor();
+      setDecorating(false);
+    }
     try {
       localStorage.setItem('estante:view', v);
     } catch {
@@ -245,10 +273,24 @@ export default function ShelfPage() {
             className={`btn btn-sm ${arranging ? 'btn-primary' : ''}`}
             onClick={() => {
               if (!arranging && sort !== 'manual') setSort('manual');
+              setDecorating(false);
               setArranging(!arranging);
             }}
           >
             {arranging ? 'Pronto' : 'Reorganizar'}
+          </button>
+        )}
+        {canEdit && view === 'estante' && (
+          <button
+            type="button"
+            className={`btn btn-sm ${decorating ? 'btn-primary' : ''}`}
+            onClick={() => {
+              if (decorating) flushDecor();
+              setArranging(false);
+              setDecorating(!decorating);
+            }}
+          >
+            <Icon name="brush" size={16} /> {decorating ? 'Pronto' : 'Decorar'}
           </button>
         )}
       </div>
@@ -277,7 +319,18 @@ export default function ShelfPage() {
         </Empty>
       ) : view === 'estante' ? (
         <>
-          <Shelf books={list} reorder={arranging} onReorder={onReorder} />
+          <Shelf
+            books={list}
+            reorder={arranging}
+            onReorder={onReorder}
+            decor={decor}
+            decorating={decorating}
+            onDecorChange={changeDecor}
+            onDecorDone={() => {
+              flushDecor();
+              setDecorating(false);
+            }}
+          />
           <div className="row wrap tiny muted" style={{ gap: 14 }}>
             {(['lido', 'lendo', 'nao_lido', 'abandonado', 'desejo'] as BookStatus[]).map((s) => (
               <span key={s} className="row" style={{ gap: 6 }}>

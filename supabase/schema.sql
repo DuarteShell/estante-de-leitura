@@ -20,6 +20,7 @@ alter table public.profiles add column if not exists bio         text;
 alter table public.profiles add column if not exists annual_goal int;
 alter table public.profiles add column if not exists is_public   boolean not null default true;
 alter table public.profiles add column if not exists created_at  timestamptz not null default now();
+alter table public.profiles add column if not exists shelf_decor jsonb;
 
 do $$ begin
   alter table public.profiles add constraint profiles_username_format

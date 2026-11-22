@@ -291,10 +291,10 @@ h3 { font-size: 17px; }
 .shelf-case {
   background: #e9dfc9; border: 10px solid #8a5f3c; border-radius: 20px; padding-top: 14px;
   box-shadow: inset 0 10px 24px rgba(92, 61, 38, 0.18), 0 10px 24px rgba(92, 61, 38, 0.15);
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden;
 }
-.shelf-row { display: flex; align-items: flex-end; gap: 3px; height: 176px; padding: 0 12px; }
-.plank { height: 14px; background: var(--wood); border-top: 3px solid var(--wood-l); box-shadow: 0 6px 8px rgba(60, 38, 20, 0.25); }
+.shelf-row { display: flex; align-items: flex-end; gap: 3px; height: 176px; padding: 0 12px; position: relative; }
+.plank { height: 14px; background: var(--plank, var(--wood)); border-top: 3px solid var(--plank-edge, var(--wood-l)); box-shadow: 0 6px 8px rgba(60, 38, 20, 0.25); position: relative; z-index: 2; }
 .spine {
   flex-shrink: 0; border-radius: 3px 3px 2px 2px; display: flex; flex-direction: column; align-items: center;
   justify-content: space-between; padding: 8px 0 7px; text-decoration: none; overflow: hidden;
@@ -309,6 +309,58 @@ h3 { font-size: 17px; }
 .spine .s-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--paper); flex-shrink: 0; }
 .spine.wish { background: transparent !important; border: 2px dashed #a7896a; box-shadow: none; }
 .shelf-deco { margin-left: auto; flex-shrink: 0; }
+
+/* enfeites da estante */
+.deco { flex-shrink: 0; position: relative; z-index: 3; display: flex; align-items: flex-end; justify-content: center; line-height: 0; border-radius: 10px; }
+.deco > span { display: block; line-height: 0; }
+.deco svg { display: block; overflow: visible; }
+.deco .flip { transform: scaleX(-1); }
+.deco-abs { position: absolute; bottom: 0; }
+.deco-edit { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: 1.5px dashed rgba(122, 82, 53, 0.45); outline-offset: 2px; transition: outline-color 0.15s ease, background 0.15s ease; }
+.deco-edit:hover { outline-color: var(--gold); background: rgba(255, 255, 255, 0.16); }
+.deco-edit.sel { outline: 2.5px solid var(--gold); background: rgba(255, 255, 255, 0.22); }
+.deco-edit:focus-visible { outline: 3px solid var(--moss); }
+.deco-ghost { outline: none !important; background: transparent !important; }
+.decorating .spine { cursor: default; opacity: 0.88; }
+.decorating .spine:hover { transform: none; }
+.decor-drop { width: 0; align-self: stretch; position: relative; margin: 0 -1.5px; }
+.decor-drop::after { content: ''; position: absolute; left: -2px; top: 18%; bottom: 0; width: 4px; border-radius: 4px; background: var(--gold); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5); }
+.decor-drop.abs { position: absolute; top: 0; bottom: 0; margin: 0; }
+.garland { position: absolute; top: 0; left: 0; z-index: 4; pointer-events: none; }
+.twinkle { animation: twinkle 2.4s ease-in-out infinite alternate; }
+@keyframes twinkle { from { opacity: 0.55; } to { opacity: 1; } }
+.glow { animation: twinkle 3s ease-in-out infinite alternate; }
+.sway-soft { animation: sway 4.5s ease-in-out infinite alternate; transform-origin: 30px 22px; }
+@media (prefers-reduced-motion: reduce) { .twinkle, .glow, .sway-soft { animation: none; } }
+
+/* barra do modo decorar */
+.decor-bar {
+  position: sticky; bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 25;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;
+  background: rgba(251, 248, 239, 0.97); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 10px 28px rgba(60, 38, 20, 0.18);
+}
+@media (min-width: 900px) { .decor-bar { bottom: 18px; } }
+.decor-arrows { display: inline-flex; gap: 4px; }
+.decor-arrows .btn { padding: 0 8px; }
+@media (max-width: 420px) { .decor-bar .lbl { display: none; } }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(60, 38, 20, 0.18); padding: 0; cursor: pointer; }
+.swatch.on { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--moss); border-color: transparent; }
+.swatches.sm { gap: 6px; justify-content: center; }
+.swatches.sm .swatch { width: 22px; height: 22px; }
+.decor-catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; }
+.decor-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 8px; border-radius: 16px; background: var(--tan); }
+.decor-pick { display: flex; flex-direction: column; align-items: center; gap: 6px; border: none; background: transparent; padding: 0; color: var(--ink); cursor: pointer; }
+.decor-prev { height: 112px; width: 100%; display: flex; align-items: flex-end; justify-content: center; border-radius: 12px; background: #e9dfc9; border-bottom: 6px solid var(--wood); transition: transform 0.15s ease; overflow: hidden; }
+.decor-prev svg { display: block; max-height: 104px; width: auto; }
+.decor-pick:hover .decor-prev { transform: translateY(-2px); }
+.decor-field { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.decor-field legend { font-weight: 800; font-size: 14px; padding: 0; margin-bottom: 8px; color: var(--ink); }
+.style-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.style-opt { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 2px solid transparent; background: transparent; border-radius: 14px; padding: 6px; font-size: 12px; font-weight: 700; color: var(--ink-2); cursor: pointer; min-width: 64px; }
+.style-opt.on { border-color: var(--moss); color: var(--ink); background: var(--sage-l); }
+.style-chip { width: 44px; height: 36px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(60, 38, 20, 0.15); }
 
 /* estrelas */
 .stars { display: inline-flex; align-items: center; gap: 2px; }

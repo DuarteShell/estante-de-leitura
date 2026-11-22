@@ -25,7 +25,13 @@ const PATHS = {
   quote: 'M6 17h4l2-4V7H6v6h3zM14 17h4l2-4V7h-6v6h3z',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
   play: 'M7 4l13 8-13 8z',
-  flag: 'M5 21V4M5 4h11l-2 4 2 4H5'
+  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  left: 'M15 5l-7 7 7 7',
+  right: 'M9 5l7 7-7 7',
+  up: 'M5 15l7-7 7 7',
+  down: 'M5 9l7 7 7-7',
+  flip: 'M12 3v18M8 7l-5 5 5 5zM16 7l5 5-5 5z',
+  brush: 'M14 4l6 6-8 8H6v-6zM4 20c2 0 2-2 2-2'
 } as const;
 
 export type IconName = keyof typeof PATHS;

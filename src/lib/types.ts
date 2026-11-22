@@ -10,6 +10,39 @@ export interface Profile {
   site_title: string | null;
   bio: string | null;
   annual_goal: number | null;
+  /** enfeites e estilo da estante (null = enfeites automáticos) */
+  shelf_decor?: ShelfDecor | null;
+}
+
+/** um enfeite colocado na estante */
+export interface ShelfDecorItem {
+  id: string;
+  /** tipo do enfeite (ver catálogo em components/ShelfDecor) */
+  kind: string;
+  /** variação de cor */
+  tone: number;
+  /** prateleira (0 = a de cima) */
+  row: number;
+  /**
+   * posição na prateleira: fração dos livros que ficam à esquerda (0 = começo, 1 = fim).
+   * Em prateleira sem livros é a posição horizontal (0 a 1).
+   */
+  pos: number;
+  /** espelhado */
+  flip?: boolean;
+}
+
+export interface ShelfDecor {
+  items: ShelfDecorItem[];
+  /** madeira da estante */
+  wood?: string;
+  /** cor e padrão do fundo */
+  wall?: string;
+  pattern?: string;
+  /** varal de luzinhas no alto */
+  lights?: 'quente' | 'colorida' | null;
+  /** quantas prateleiras no mínimo */
+  rows?: number;
 }
 
 export interface Book {

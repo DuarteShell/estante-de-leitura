@@ -48,7 +48,7 @@ const strip = <T extends object>(row: T): T => {
 };
 
 function friendly(msg: string) {
-  if (/(series|shelf_position).*(column|schema cache)|column.*(series|shelf_position)/i.test(msg))
+  if (/(series|shelf_position|shelf_decor).*(column|schema cache)|column.*(series|shelf_position|shelf_decor)/i.test(msg))
     return 'Falta atualizar o banco: rode o supabase/schema.sql de novo no Supabase';
   if (/invalid login credentials/i.test(msg)) return '@usuário ou PIN incorretos';
   if (/already registered|already exists/i.test(msg)) return 'Esse @ já está em uso';
