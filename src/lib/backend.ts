@@ -48,7 +48,7 @@ const strip = <T extends object>(row: T): T => {
 };
 
 function friendly(msg: string) {
-  if (/(series|shelf_position|shelf_decor).*(column|schema cache)|column.*(series|shelf_position|shelf_decor)/i.test(msg))
+  if (/(series|shelf_position|shelf_decor|progress_pct|audio_minutes|audio_position).*(column|schema cache)|column.*(series|shelf_position|shelf_decor|progress_pct|audio_minutes|audio_position)/i.test(msg))
     return 'Falta atualizar o banco: rode o supabase/schema.sql de novo no Supabase';
   if (/invalid login credentials/i.test(msg)) return '@usuário ou PIN incorretos';
   if (/already registered|already exists/i.test(msg)) return 'Esse @ já está em uso';
@@ -139,7 +139,11 @@ class SupabaseBackend implements Backend {
     ]);
     return {
       profile,
-      books: (this.check(b) as Book[]).map((x) => ({ ...x, series_index: x.series_index == null ? null : Number(x.series_index) })),
+      books: (this.check(b) as Book[]).map((x) => ({
+        ...x,
+        series_index: x.series_index == null ? null : Number(x.series_index),
+        progress_pct: x.progress_pct == null ? null : Number(x.progress_pct)
+      })),
       readings: (this.check(r) as Reading[]).map((x) => ({ ...x, rating: x.rating == null ? null : Number(x.rating) })),
       quotes: this.check(q) as Quote[]
     };

@@ -6,6 +6,7 @@ import { todayIso } from '../lib/util';
 import { Icon } from './Icon';
 import { ReadingFields, draftFrom, draftToReading, type ReadingDraft } from './ReadingForm';
 import { ChipGroup, Cover, FORMAT_OPTIONS, STATUS_OPTIONS } from './ui';
+import { DurationInput } from './ProgressTracker';
 
 const COMMON_GENRES = ['Romance', 'Fantasia', 'Ficção científica', 'Clássicos', 'Terror', 'Suspense', 'Mistério', 'Não ficção', 'Quadrinhos / mangá', 'Jovem adulto', 'Poesia', 'Biografia'];
 
@@ -42,6 +43,9 @@ export function BookForm({
   const [draft, setDraft] = useState<ReadingDraft>(() => draftFrom());
   const [lendoFormat, setLendoFormat] = useState<Reading['format']>(null);
   const [currentPage, setCurrentPage] = useState('');
+  const [currentPct, setCurrentPct] = useState('');
+  const [audioTotal, setAudioTotal] = useState<number | null>(null);
+  const [audioPos, setAudioPos] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -119,7 +123,19 @@ export function BookForm({
       book.status = status;
       if (status === 'lendo') {
         reading = { status: 'lendo', started_at: todayIso(), format: lendoFormat };
-        book.current_page = currentPage ? Number(currentPage) : 0;
+        const p = pages ? Number(pages) : null;
+        if (lendoFormat === 'kindle' && currentPct) {
+          const pct = Math.max(0, Math.min(100, Number(currentPct)));
+          book.progress_pct = pct;
+          book.current_page = p ? Math.round((pct / 100) * p) : 0;
+        } else if (lendoFormat === 'audiobook' && audioTotal) {
+          const pos = Math.min(audioPos ?? 0, audioTotal);
+          book.audio_minutes = audioTotal;
+          book.audio_position = pos;
+          book.current_page = p ? Math.round((pos / audioTotal) * p) : 0;
+        } else {
+          book.current_page = currentPage ? Number(currentPage) : 0;
+        }
       } else if (status === 'lido' && registerReading) {
         reading = draftToReading({ ...draft, status: 'lido' });
       } else if (status === 'abandonado') {
@@ -282,10 +298,28 @@ export function BookForm({
             <span>Formato</span>
             <ChipGroup soft value={lendoFormat ?? ('' as never)} onChange={setLendoFormat} options={FORMAT_OPTIONS} />
           </div>
-          <label className="field">
-            <span>Página atual</span>
-            <input className="input" type="number" inputMode="numeric" min={0} value={currentPage} onChange={(e) => setCurrentPage(e.target.value)} />
-          </label>
+          {lendoFormat === 'kindle' ? (
+            <label className="field">
+              <span>Porcentagem lida (%)</span>
+              <input className="input" type="number" inputMode="numeric" min={0} max={100} placeholder="Ex.: 35" value={currentPct} onChange={(e) => setCurrentPct(e.target.value)} />
+            </label>
+          ) : lendoFormat === 'audiobook' ? (
+            <>
+              <div className="field">
+                <span>Duração total do audiobook</span>
+                <DurationInput value={audioTotal} onChange={setAudioTotal} label="Duração total" />
+              </div>
+              <div className="field">
+                <span>Quanto já ouviu</span>
+                <DurationInput value={audioPos} onChange={setAudioPos} label="Tempo ouvido" />
+              </div>
+            </>
+          ) : (
+            <label className="field">
+              <span>Página atual</span>
+              <input className="input" type="number" inputMode="numeric" min={0} value={currentPage} onChange={(e) => setCurrentPage(e.target.value)} />
+            </label>
+          )}
         </div>
       )}
 

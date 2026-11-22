@@ -7,6 +7,7 @@ import { availableYears, shelfInsights, shelfProgress, yearStats, type OpenSerie
 import { FORMAT_SHORT } from '../lib/types';
 import { fmtNum, fmtRating } from '../lib/util';
 import { useLibrary } from '../store/library';
+import { readingProgress } from '../lib/progress';
 
 const GENRE_COLORS = ['#3F5A39', '#A3B18A', '#7A5235', '#E0C49C', '#5E7D8A', '#C4855E'];
 const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -214,8 +215,8 @@ export default function Home() {
                   </div>
                   <div className="now-list">
                     {reading.slice(0, 3).map((b) => {
-                      const pct = b.pages && b.current_page ? Math.min(100, Math.round((b.current_page / b.pages) * 100)) : 0;
                       const active = readings.find((r) => r.book_id === b.id && r.status === 'lendo');
+                      const prog = readingProgress(b, active?.format);
                       return (
                         <Link key={b.id} to={`${base}/livro/${b.id}`} className="book-row">
                           <Cover book={b} width={58} />
@@ -226,10 +227,10 @@ export default function Home() {
                               {active?.format ? ` · ${FORMAT_SHORT[active.format]}` : ''}
                             </span>
                             <div className="progress" style={{ height: 8 }}>
-                              <div style={{ width: `${pct}%` }} />
+                              <div style={{ width: `${prog.pct ?? 0}%` }} />
                             </div>
                             <span className="tiny" style={{ fontWeight: 700, color: 'var(--bark)' }}>
-                              {b.pages ? `p. ${b.current_page ?? 0} de ${b.pages} · ${pct}%` : 'Sem total de páginas'}
+                              {prog.label}
                             </span>
                           </div>
                         </Link>

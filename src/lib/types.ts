@@ -57,6 +57,11 @@ export interface Book {
   status: BookStatus;
   owned: boolean;
   current_page: number | null;
+  /** progresso em % (0–100), usado quando a leitura é no Kindle / e-book */
+  progress_pct?: number | null;
+  /** audiobook: duração total e quanto já foi ouvido, em minutos */
+  audio_minutes?: number | null;
+  audio_position?: number | null;
   notes: string | null;
   /** saga/série: nome, posição (pode ser 1.5) e total de livros */
   series?: string | null;

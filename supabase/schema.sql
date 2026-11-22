@@ -56,6 +56,16 @@ alter table public.books add column if not exists series         text;
 alter table public.books add column if not exists series_index   numeric(5, 1);
 alter table public.books add column if not exists series_total   int;
 alter table public.books add column if not exists shelf_position int;
+-- progresso em Kindle (%) e audiobook (minutos)
+alter table public.books add column if not exists progress_pct   numeric(5, 2);
+alter table public.books add column if not exists audio_minutes  int;
+alter table public.books add column if not exists audio_position int;
+do $$ begin
+  alter table public.books add constraint books_progress_values
+    check ((progress_pct is null or progress_pct between 0 and 100)
+       and (audio_minutes is null or audio_minutes > 0)
+       and (audio_position is null or audio_position >= 0));
+exception when duplicate_object then null; end $$;
 do $$ begin
   alter table public.books add constraint books_series_numbers
     check ((series_index is null or series_index >= 0) and (series_total is null or series_total > 0));

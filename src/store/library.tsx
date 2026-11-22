@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { backend, type PublicShelf } from '../lib/backend';
 import type { Book, BookStatus, LibraryData, Profile, Quote, Reading } from '../lib/types';
 import { nameCase, normalizeBookNames, nowIso, titleCase, todayIso, uid } from '../lib/util';
+import { resetProgressPatch } from '../lib/progress';
 
 type NewBook = Partial<Book> & { title: string };
 type NewReading = Partial<Reading>;
@@ -293,8 +294,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         status = latest.status;
       }
       const patch: Partial<Book> = { status };
-      if (status === 'lido') patch.current_page = null;
-      if (status !== book.status || (status === 'lido' && book.current_page != null)) await updateBook(bookId, patch);
+      if (status === 'lido') Object.assign(patch, { current_page: null }, resetProgressPatch(book));
+      const leftover = book.current_page != null || book.progress_pct != null || book.audio_position != null;
+      if (status !== book.status || (status === 'lido' && leftover)) await updateBook(bookId, patch);
     },
     [updateBook]
   );
@@ -359,7 +361,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           await reload();
         }
       },
-      setStatus: (id, status) => updateBook(id, { status, ...(status === 'lido' ? { current_page: null } : {}) }),
+      setStatus: (id, status) => {
+        const book = dataRef.current.books.find((b) => b.id === id);
+        return updateBook(id, { status, ...(status === 'lido' ? { current_page: null, ...(book ? resetProgressPatch(book) : {}) } : {}) });
+      },
       addReading: (bookId, r) =>
         run(async () => {
           const reading = makeReading(bookId, r);
@@ -386,7 +391,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           const reading = makeReading(bookId, { status: 'lendo', started_at: todayIso(), format });
           await backend.insertReadings([reading]);
           patchState((d) => ({ ...d, readings: [...d.readings, reading] }));
-          await updateBook(bookId, { status: 'lendo', current_page: 0 });
+          const book = dataRef.current.books.find((b) => b.id === bookId);
+          await updateBook(bookId, { status: 'lendo', current_page: 0, ...(book ? resetProgressPatch(book) : {}) });
         }),
       finishReading: (bookId, r) =>
         run(async () => {
@@ -409,7 +415,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             readings = [...dataRef.current.readings, reading];
           }
           patchState((d) => ({ ...d, readings }));
-          await updateBook(bookId, { status, current_page: status === 'lido' ? null : book?.current_page ?? null });
+          await updateBook(bookId, {
+            status,
+            current_page: status === 'lido' ? null : book?.current_page ?? null,
+            ...(status === 'lido' && book ? resetProgressPatch(book) : {})
+          });
         }),
       addQuote: (bookId, text, page) =>
         run(async () => {

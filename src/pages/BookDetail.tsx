@@ -4,6 +4,8 @@ import { BookForm } from '../components/BookForm';
 import { HeroLandscape } from '../components/Decor';
 import { Icon } from '../components/Icon';
 import { ReadingModal } from '../components/ReadingForm';
+import { ProgressTracker } from '../components/ProgressTracker';
+import { progressMode } from '../lib/progress';
 import { ChipGroup, Cover, Empty, FORMAT_OPTIONS, FormatPill, Modal, STATUS_OPTIONS, Fav, Stars, StatusPill } from '../components/ui';
 import type { BookStatus, Reading, ReadingFormat } from '../lib/types';
 import { fmtDate, readingYear, seriesBooks, seriesPosition, seriesTotal } from '../lib/util';
@@ -57,6 +59,7 @@ export default function BookDetail() {
   const isFavorite = mine.some((r) => r.favorite);
   const bookQuotes = quotes.filter((q) => q.book_id === book.id);
   const pct = book.pages && book.current_page ? Math.min(100, Math.round((book.current_page / book.pages) * 100)) : 0;
+  const mode = progressMode(active?.format);
 
   const onStatus = async (s: BookStatus) => {
     if (s === book.status) return;
@@ -165,36 +168,59 @@ export default function BookDetail() {
         <section className="card stack">
           <div className="row between">
             <span className="eyebrow">Progresso</span>
-            <span className="small" style={{ fontWeight: 800, color: 'var(--moss)' }}>{book.pages ? `${pct}%` : ''}</span>
+            <span className="small" style={{ fontWeight: 800, color: 'var(--moss)' }}>{mode === 'pages' && book.pages ? `${pct}%` : ''}</span>
           </div>
-          <div className="serif" style={{ fontSize: 22, fontWeight: 600 }}>
-            Página {book.current_page ?? 0} {book.pages && <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink-2)' }}>de {book.pages}</span>}
-          </div>
-          {book.pages && (
-            <div className="progress" style={{ height: 12 }}>
-              <div style={{ width: `${pct}%` }} />
-            </div>
+          {canEdit && active && (
+            <ChipGroup
+              soft
+              label="Formato da leitura"
+              value={active.format ?? ('fisico' as ReadingFormat)}
+              onChange={(format) => format !== active.format && lib.updateReading(active.id, { format })}
+              options={FORMAT_OPTIONS}
+            />
+          )}
+          {mode !== 'pages' ? (
+            <ProgressTracker
+              book={book}
+              mode={mode}
+              canEdit={canEdit}
+              onSave={(patch) => lib.updateBook(book.id, patch)}
+              onComplete={() => setDialog({ kind: 'finish', status: 'lido' })}
+            />
+          ) : (
+            <>
+              <div className="serif" style={{ fontSize: 22, fontWeight: 600 }}>
+                Página {book.current_page ?? 0} {book.pages && <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink-2)' }}>de {book.pages}</span>}
+              </div>
+              {book.pages && (
+                <div className="progress" style={{ height: 12 }}>
+                  <div style={{ width: `${pct}%` }} />
+                </div>
+              )}
+            </>
           )}
           {canEdit && (
             <>
-              <form
-                className="row"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  savePage(Number(page) || 0);
-                }}
-              >
-                <button type="button" className="btn" onClick={() => savePage((book.current_page ?? 0) - 10)} aria-label="Menos 10 páginas">
-                  −10
-                </button>
-                <label className="grow">
-                  <span className="sr-only">Página atual</span>
-                  <input className="input" type="number" inputMode="numeric" min={0} value={page} onChange={(e) => setPage(e.target.value)} onBlur={() => Number(page) !== book.current_page && savePage(Number(page) || 0)} style={{ textAlign: 'center' }} />
-                </label>
-                <button type="button" className="btn btn-primary" onClick={() => savePage((book.current_page ?? 0) + 10)} aria-label="Mais 10 páginas">
-                  +10
-                </button>
-              </form>
+              {mode === 'pages' && (
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    savePage(Number(page) || 0);
+                  }}
+                >
+                  <button type="button" className="btn" onClick={() => savePage((book.current_page ?? 0) - 10)} aria-label="Menos 10 páginas">
+                    −10
+                  </button>
+                  <label className="grow">
+                    <span className="sr-only">Página atual</span>
+                    <input className="input" type="number" inputMode="numeric" min={0} value={page} onChange={(e) => setPage(e.target.value)} onBlur={() => Number(page) !== book.current_page && savePage(Number(page) || 0)} style={{ textAlign: 'center' }} />
+                  </label>
+                  <button type="button" className="btn btn-primary" onClick={() => savePage((book.current_page ?? 0) + 10)} aria-label="Mais 10 páginas">
+                    +10
+                  </button>
+                </form>
+              )}
               <div className="row">
                 <button className="btn btn-primary grow" onClick={() => setDialog({ kind: 'finish', status: 'lido' })}>
                   <Icon name="check" size={18} /> Terminei!
