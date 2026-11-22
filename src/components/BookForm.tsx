@@ -202,18 +202,35 @@ export function BookForm({
             </button>
           ))}
         </div>
-        <input
-          className="input"
-          placeholder="Digite e aperte Enter"
-          value={genreText}
-          onChange={(e) => setGenreText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault();
-              addGenre(genreText);
-            }
-          }}
-        />
+        <div className="row">
+          <input
+            className="input"
+            style={{ flex: 1, minWidth: 0 }}
+            placeholder="Digite um gênero"
+            enterKeyHint="done"
+            value={genreText}
+            onChange={(e) => {
+              // no teclado do celular o Enter/vírgula nem sempre chega no onKeyDown: a vírgula é tratada aqui
+              const v = e.target.value;
+              if (v.includes(',')) {
+                const parts = v.split(',');
+                const rest = parts.pop() ?? '';
+                const add = parts.map((x) => x.trim()).filter((x) => x && !genres.includes(x));
+                if (add.length) setGenres([...genres, ...new Set(add)]);
+                setGenreText(rest.trimStart());
+              } else setGenreText(v);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addGenre(genreText);
+              }
+            }}
+          />
+          <button type="button" className="btn btn-sm" onClick={() => addGenre(genreText)} disabled={!genreText.trim()}>
+            <Icon name="plus" size={16} /> Adicionar
+          </button>
+        </div>
         <div className="chips">
           {genreSuggestions.map((g) => (
             <button type="button" key={g} className="chip btn-sm" style={{ minHeight: 34, fontSize: 13 }} onClick={() => addGenre(g)}>

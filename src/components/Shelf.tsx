@@ -17,6 +17,8 @@ interface Spine {
 interface Placed {
   item: ShelfDecorItem;
   def: DecorDef;
+  /** posição (px, a partir do recuo) nas prateleiras sem livros */
+  x?: number;
 }
 
 type Token = { t: 'book'; s: Spine } | { t: 'decor'; d: Placed };
@@ -67,6 +69,17 @@ function posAt(tokens: Token[], i: number, n: number): number {
   return (lo + hi) / 2;
 }
 
+/** prateleira sem livros: põe os enfeites perto da posição desejada, sem sobrepor */
+function spreadAbs(decorRow: Placed[], inner: number) {
+  const xs = decorRow.map(({ item, def }) => clamp(item.pos * inner - def.w / 2, 0, Math.max(0, inner - def.w)));
+  for (let i = 1; i < xs.length; i++) xs[i] = Math.max(xs[i], xs[i - 1] + decorRow[i - 1].def.w + GAP);
+  for (let i = xs.length - 1; i >= 0; i--) {
+    const limit = i === xs.length - 1 ? inner - decorRow[i].def.w : xs[i + 1] - decorRow[i].def.w - GAP;
+    xs[i] = Math.max(0, Math.min(xs[i], limit));
+  }
+  decorRow.forEach((d, i) => (d.x = xs[i]));
+}
+
 /** distribui livros e enfeites nas prateleiras conforme a largura */
 function layoutShelf(books: Book[], decor: ShelfDecor | null, width: number): Row[] {
   const inner = width - PAD * 2;
@@ -112,6 +125,7 @@ function layoutShelf(books: Book[], decor: ShelfDecor | null, width: number): Ro
     const decorRow = itemsIn(r)
       .map((item) => ({ item, def: decorDef(item.kind)! }))
       .sort((a, b) => (n ? gapOf(a.item.pos, n) - gapOf(b.item.pos, n) : 0) || a.item.pos - b.item.pos);
+    if (!n) spreadAbs(decorRow, inner);
     const seq: Token[] = [];
     if (n) {
       let k = 0;
@@ -293,19 +307,22 @@ export function Shelf({
     let pos = 1;
     if (row && !row.books.length) {
       // prateleira vazia: procura o maior espaço livre entre os enfeites
-      const spans = row.decor
-        .map((d) => {
-          const left = clamp(d.item.pos * inner - d.def.w / 2, 0, inner - d.def.w);
-          return [left, left + d.def.w] as [number, number];
-        })
-        .sort((a, b) => a[0] - b[0]);
-      let best = { size: -1, mid: inner / 2 };
+      // (row.decor já vem na ordem da prateleira, com `x` calculado sem sobreposição)
+      let best = { size: -1, mid: inner / 2, lo: 0, hi: 1 };
       let x = 0;
-      for (const [a, b] of [...spans, [inner, inner] as [number, number]]) {
-        if (a - x > best.size) best = { size: a - x, mid: (x + a) / 2 };
-        x = Math.max(x, b);
+      let lo = 0;
+      for (const d of [...row.decor, null]) {
+        const a = d ? d.x ?? 0 : inner + GAP;
+        const hi = d ? d.item.pos : 1;
+        if (a - x > best.size) best = { size: a - x, mid: (x + a - GAP) / 2, lo, hi };
+        if (d) {
+          x = (d.x ?? 0) + d.def.w + GAP;
+          lo = d.item.pos;
+        }
       }
-      pos = clamp(best.mid / inner, 0, 1);
+      // fica entre os vizinhos para cair exatamente nesse vão
+      const eps = Math.min(0.001, (best.hi - best.lo) / 3);
+      pos = clamp(best.mid / inner, best.lo + eps, best.hi - eps);
     } else if (row) {
       const n = row.books.length;
       const atEnd = row.decor.filter((d) => gapOf(d.item.pos, n) === n).map((d) => d.item.pos);
@@ -442,8 +459,8 @@ export function Shelf({
     '--plank-edge': wood.edge
   } as CSSProperties;
 
-  const renderDecor = ({ item, def }: Placed, extra: { abs?: boolean; pushRight?: boolean }) => {
-    const left = extra.abs ? PAD + clamp(item.pos * inner - def.w / 2, 0, inner - def.w) : undefined;
+  const renderDecor = ({ item, def, x }: Placed, extra: { abs?: boolean; pushRight?: boolean }) => {
+    const left = extra.abs ? PAD + (x ?? clamp(item.pos * inner - def.w / 2, 0, inner - def.w)) : undefined;
     return (
       <div
         key={item.id}
