@@ -20,6 +20,13 @@ export interface YearStats {
   longest: Book | null;
 }
 
+/** favorito vale meia estrela a mais na hora de escolher a melhor nota */
+export const FAVORITE_BONUS = 0.5;
+/** peso de uma leitura para "melhor nota": a nota + bônus do coração */
+export const ratingScore = (r: Pick<Reading, 'rating' | 'favorite'>) => (r.rating ?? 0) + (r.favorite ? FAVORITE_BONUS : 0);
+/** compara duas leituras pela melhor nota: peso (nota + coração) e, no empate, a nota real */
+const ratingRank = (r: Pick<Reading, 'rating' | 'favorite'>) => ratingScore(r) * 10 + (r.rating ?? 0);
+
 export function yearStats(year: number, books: Book[], readings: Reading[]): YearStats {
   const byId = new Map(books.map((b) => [b.id, b]));
   const inYear = readings.filter((r) => readingYear(r) === year);
@@ -32,6 +39,7 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
   let ratingSum = 0;
   let rated = 0;
   let best: YearStats['best'] = null;
+  let bestScore = -1;
   let longest: Book | null = null;
 
   for (const r of finished) {
@@ -42,7 +50,10 @@ export function yearStats(year: number, books: Book[], readings: Reading[]): Yea
     if (r.rating != null) {
       ratingSum += r.rating;
       rated += 1;
-      if (b && (!best || r.rating > best.rating)) best = { book: b, rating: r.rating };
+      if (b && ratingRank(r) > bestScore) {
+        best = { book: b, rating: r.rating };
+        bestScore = ratingRank(r);
+      }
     }
     formats[r.format ?? 'nd'] += 1;
     if (b) {
@@ -150,7 +161,8 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   for (const r of base) {
     const b = byId.get(r.book_id);
     if (!b) continue;
-    const w = r.rating == null ? 1 : r.rating >= 4 ? 1.5 : r.rating < 2.5 ? 0.3 : 1;
+    // coração pesa mais que nota alta
+    const w = r.favorite ? 2 : r.rating == null ? 1 : r.rating >= 4 ? 1.5 : r.rating < 2.5 ? 0.3 : 1;
     b.genres.forEach((g) => genreW.set(g, (genreW.get(g) ?? 0) + w));
     if (b.author) authorW.set(b.author, (authorW.get(b.author) ?? 0) + w);
   }
@@ -343,6 +355,7 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
   let dated = 0;
   let datedPages = 0;
   let datedPageDays = 0;
+  let favScore = -1;
   const rec: ReaderProfile['records'] = { favorite: null, longest: null, shortest: null, fastest: null, slowest: null, topAuthor: null, topSeries: null, rereads: [] };
 
   for (const r of finished) {
@@ -364,7 +377,10 @@ export function readerProfile(period: Period, books: Book[], readings: Reading[]
       ratingSum += r.rating;
       rated += 1;
       ratings[Math.max(0, Math.ceil(r.rating) - 1)] += 1;
-      if (!rec.favorite || r.rating >= rec.favorite.rating) rec.favorite = { book: b, rating: r.rating };
+      if (!rec.favorite || ratingRank(r) >= favScore) {
+        rec.favorite = { book: b, rating: r.rating };
+        favScore = ratingRank(r);
+      }
     }
     if (!audio && p > 0) {
       pages += p;
