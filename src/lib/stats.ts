@@ -110,7 +110,8 @@ export function shelfProgress(books: Book[]) {
   /** só os que nem foram começados (base das sugestões "pra ler a seguir") */
   const notStarted = shelf.filter((b) => b.status === 'nao_lido').length;
   const inProgress = shelf.filter((b) => b.status === 'lendo').length;
-  return { total: shelf.length, read, unread, notStarted, inProgress, pct: shelf.length ? Math.round((read / shelf.length) * 100) : 0 };
+  const abandoned = shelf.filter((b) => b.status === 'abandonado').length;
+  return { total: shelf.length, read, unread, notStarted, inProgress, abandoned, pct: shelf.length ? Math.round((read / shelf.length) * 100) : 0 };
 }
 
 /* ---------- Leitura da estante: ritmo, sagas e sugestões ---------- */
@@ -146,6 +147,9 @@ export interface ShelfInsights {
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** peso de um livro abandonado nas sugestões, comparado a um não começado */
+const ABANDONED_WEIGHT = 0.5;
 
 export function shelfInsights(books: Book[], readings: Reading[], now = new Date()): ShelfInsights {
   const year = now.getFullYear();
@@ -246,7 +250,11 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   };
   const rank = (list: Book[]) =>
     list
-      .map((b) => ({ s: score(b), w: nextIds.has(b.id) ? 1000 : (b.author ? (authorW.get(b.author) ?? 0) * 2 : 0) + b.genres.reduce((a, g) => a + (genreW.get(g) ?? 0), 0) }))
+      .map((b) => {
+        const w = nextIds.has(b.id) ? 1000 : (b.author ? (authorW.get(b.author) ?? 0) * 2 : 0) + b.genres.reduce((a, g) => a + (genreW.get(g) ?? 0), 0);
+        // abandonados entram, mas valem metade: só passam na frente com afinidade bem maior
+        return { s: score(b), w: b.status === 'abandonado' ? w * ABANDONED_WEIGHT : w };
+      })
       .filter((x): x is { s: Suggestion; w: number } => !!x.s)
       .sort((a, b) => b.w - a.w)
       .slice(0, 3)
@@ -256,8 +264,8 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     pace,
     monthsToClear,
     openSeries: openSeries.slice(0, 4),
-    // próximos de saga abandonados também entram (retomar a leitura)
-    suggestions: rank([...unread, ...books.filter((b) => b.status === 'abandonado' && nextIds.has(b.id))]),
+    // abandonados da estante também entram (com penalidade no peso)
+    suggestions: rank([...unread, ...books.filter((b) => b.status === 'abandonado' && (b.owned || nextIds.has(b.id)))]),
     wishSuggestions: rank(books.filter((b) => b.status === 'desejo'))
   };
 }

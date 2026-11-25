@@ -291,7 +291,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       else {
         const key = (r: Reading) => r.finished_at ?? r.started_at ?? (r.year ? `${r.year}-12-31` : '') + r.created_at;
         const latest = [...mine].sort((a, b) => key(b).localeCompare(key(a)))[0];
-        status = latest.status;
+        // releitura abandonada não desfaz uma leitura terminada: o livro segue lido
+        status = latest.status === 'abandonado' && mine.some((r) => r.status === 'lido') ? 'lido' : latest.status;
       }
       const patch: Partial<Book> = { status };
       if (status === 'lido') Object.assign(patch, { current_page: null }, resetProgressPatch(book));
@@ -415,10 +416,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             readings = [...dataRef.current.readings, reading];
           }
           patchState((d) => ({ ...d, readings }));
+          // releitura abandonada: se já terminou o livro alguma vez, ele segue lido
+          const bookStatus = status === 'abandonado' && readings.some((x) => x.book_id === bookId && x.status === 'lido') ? 'lido' : status;
           await updateBook(bookId, {
-            status,
-            current_page: status === 'lido' ? null : book?.current_page ?? null,
-            ...(status === 'lido' && book ? resetProgressPatch(book) : {})
+            status: bookStatus,
+            current_page: bookStatus === 'lido' ? null : book?.current_page ?? null,
+            ...(bookStatus === 'lido' && book ? resetProgressPatch(book) : {})
           });
         }),
       addQuote: (bookId, text, page) =>

@@ -137,7 +137,8 @@ export default function Home() {
   };
   const shelfPct = useMemo(() => shelfProgress(books), [books]);
   const insights = useMemo(() => shelfInsights(books, readings), [books, readings]);
-  const picks = shelfPct.notStarted > 0 ? insights.suggestions : insights.wishSuggestions;
+  const fromShelf = shelfPct.notStarted + shelfPct.abandoned > 0;
+  const picks = fromShelf ? insights.suggestions : insights.wishSuggestions;
   const goal = profile?.annual_goal ?? null;
   const goalInfo = useMemo(() => {
     if (!goal || year !== thisYear) return null;
@@ -282,14 +283,19 @@ export default function Home() {
               <section className={`card insights-grid${picks.length > 0 && insights.openSeries.length > 0 ? ' two' : ''}`}>
                 {picks.length > 0 && (
                   <div className="stack pick-col">
-                    <span className="eyebrow">{shelfPct.notStarted > 0 ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
+                    <span className="eyebrow">{fromShelf ? 'Pra ler a seguir' : 'Da lista de desejos'}</span>
                     <div className="pick-grid">
                       {picks.map((p) => (
                         <PickCard key={p.book.id} s={p} base={base} />
                       ))}
                     </div>
-                    <Link to={`${base}/estante?f=${shelfPct.notStarted > 0 ? 'nao_lido' : 'desejo'}`} className="pick-more">
-                      {shelfPct.notStarted > 0 ? `ver os ${shelfPct.notStarted} não lidos` : 'ver lista de desejos'} →
+                    <Link to={`${base}/estante?f=${shelfPct.notStarted > 0 ? 'nao_lido' : fromShelf ? 'abandonado' : 'desejo'}`} className="pick-more">
+                      {shelfPct.notStarted > 0
+                        ? `ver os ${shelfPct.notStarted} não lidos`
+                        : fromShelf
+                          ? `ver ${shelfPct.abandoned === 1 ? 'o abandonado' : `os ${shelfPct.abandoned} abandonados`}`
+                          : 'ver lista de desejos'}{' '}
+                      →
                     </Link>
                   </div>
                 )}
