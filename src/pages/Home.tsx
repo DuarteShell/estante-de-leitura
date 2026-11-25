@@ -72,6 +72,7 @@ function PickCard({ s, base }: { s: Suggestion; base: string }) {
       <Cover book={s.book} width={80} />
       <span className="serif pick-t">{s.book.title}</span>
       {s.book.author && <span className="pick-a">{s.book.author}</span>}
+      <span className="pick-why">{s.reason}</span>
     </Link>
   );
 }

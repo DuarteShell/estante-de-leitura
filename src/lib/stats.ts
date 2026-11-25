@@ -184,13 +184,16 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   if (base.length < 3) base = readings.filter((r) => r.status === 'lido');
   const genreW = new Map<string, number>();
   const authorW = new Map<string, number>();
-  const usingYear = base === finishedThisYear;
+  /** livros diferentes lidos de cada autor (para o motivo da sugestão) */
+  const authorBooks = new Map<string, Set<string>>();
+  const countAuthor = (b: Book) => b.author && authorBooks.set(b.author, (authorBooks.get(b.author) ?? new Set()).add(b.id));
   for (const r of base) {
     const b = byId.get(r.book_id);
     if (!b) continue;
     const w = readingWeight(r);
     b.genres.forEach((g) => genreW.set(g, (genreW.get(g) ?? 0) + w));
     if (b.author) authorW.set(b.author, (authorW.get(b.author) ?? 0) + w);
+    countAuthor(b);
   }
   // livros marcados como lidos sem registro também contam um pouco
   if (!base.length)
@@ -199,8 +202,8 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
       .forEach((b) => {
         b.genres.forEach((g) => genreW.set(g, (genreW.get(g) ?? 0) + 0.5));
         if (b.author) authorW.set(b.author, (authorW.get(b.author) ?? 0) + 0.5);
+        countAuthor(b);
       });
-  const when = usingYear ? `em ${year}` : 'até agora';
 
   // sagas em aberto: pelo menos um lido e algo faltando
   const groups = new Map<string, Book[]>();
@@ -257,14 +260,16 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
 
   const score = (b: Book): Suggestion | null => {
     const os = nextIds.get(b.id);
-    if (os && b.status === 'abandonado') return { book: b, reason: `Retomar a saga ${os.name} (${os.read} ${os.read === 1 ? 'lido' : 'lidos'})` };
-    if (os) return { book: b, reason: `Continua a saga ${os.name} (${os.read} ${os.read === 1 ? 'lido' : 'lidos'})` };
+    // motivos curtos: aparecem no card, embaixo do autor
+    if (os && b.status === 'abandonado') return { book: b, reason: 'Retomar a saga' };
+    if (os) return { book: b, reason: 'Próximo da saga' };
     let best = 0;
     let reason = '';
     const aw = b.author ? authorW.get(b.author) ?? 0 : 0;
     if (aw) {
       best = aw * 2;
-      reason = `Você leu ${plural(Math.round(aw) || 1, 'livro', 'livros')} de ${b.author} ${when}`;
+      const n = authorBooks.get(b.author!)?.size ?? 1;
+      reason = `Você já leu ${plural(n, 'livro', 'livros')} do autor`;
     }
     let gw = 0;
     let topG = '';
@@ -275,8 +280,9 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     }
     if (gw > best) {
       best = gw;
-      reason = `${topG} é um dos gêneros que você mais leu ${when}`;
+      reason = `Você lê bastante ${topG}`;
     }
+    if (best > 0 && b.status === 'abandonado') reason = `Dar outra chance · ${reason}`;
     return best > 0 ? { book: b, reason } : null;
   };
   /** afinidade: autor conta em dobro + gêneros; abandonados valem metade */
