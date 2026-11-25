@@ -151,6 +151,21 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** peso de um livro abandonado nas sugestões, comparado a um não começado */
 const ABANDONED_WEIGHT = 0.5;
 
+/** quanto uma leitura terminada diz do gosto: coração pesa mais que nota alta */
+const readingWeight = (r: Reading) => (r.favorite ? 2 : r.rating == null ? 1 : r.rating >= 4 ? 1.5 : r.rating < 2.5 ? 0.3 : 1);
+
+/** dados de uma saga em aberto usados para desempatar as sugestões */
+interface SagaRank {
+  /** gosto pelos volumes lidos: média do peso de cada volume (sem leitura registrada = neutro) */
+  taste: number;
+  /** volumes que faltam ler (desconhecido quando não se sabe o total) */
+  remaining: number | null;
+  /** tem todos os volumes que faltam */
+  ownsAll: boolean;
+  /** data do último volume lido, para comparar (vazia se não houver) */
+  lastRead: string;
+}
+
 export function shelfInsights(books: Book[], readings: Reading[], now = new Date()): ShelfInsights {
   const year = now.getFullYear();
   const byId = new Map(books.map((b) => [b.id, b]));
@@ -173,8 +188,7 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   for (const r of base) {
     const b = byId.get(r.book_id);
     if (!b) continue;
-    // coração pesa mais que nota alta
-    const w = r.favorite ? 2 : r.rating == null ? 1 : r.rating >= 4 ? 1.5 : r.rating < 2.5 ? 0.3 : 1;
+    const w = readingWeight(r);
     b.genres.forEach((g) => genreW.set(g, (genreW.get(g) ?? 0) + w));
     if (b.author) authorW.set(b.author, (authorW.get(b.author) ?? 0) + w);
   }
@@ -196,6 +210,9 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
   }
   const openSeries: OpenSeries[] = [];
   const nextIds = new Map<string, OpenSeries>();
+  const sagaRank = new Map<string, SagaRank>();
+  const finishedOf = new Map<string, Reading[]>();
+  for (const r of readings) if (r.status === 'lido') finishedOf.set(r.book_id, [...(finishedOf.get(r.book_id) ?? []), r]);
   for (const list of groups.values()) {
     list.sort((a, b) => (a.series_index ?? 999) - (b.series_index ?? 999));
     const read = list.filter((b) => b.status === 'lido').length;
@@ -220,7 +237,21 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
       : list.map(state);
     const os = { name: list[0].series!, read, total, next, missing, volumes };
     openSeries.push(os);
-    if (next) nextIds.set(next.id, os);
+    if (next) {
+      nextIds.set(next.id, os);
+      const readVols = list.filter((b) => b.status === 'lido');
+      const volWeights = readVols.map((b) => {
+        const rs = finishedOf.get(b.id) ?? [];
+        return rs.length ? Math.max(...rs.map(readingWeight)) : 1;
+      });
+      const dates = readVols.flatMap((b) => (finishedOf.get(b.id) ?? []).map((r) => r.finished_at ?? (readingYear(r) ? `${readingYear(r)}-12-31` : '')));
+      sagaRank.set(next.id, {
+        taste: volWeights.reduce((a, w) => a + w, 0) / volWeights.length,
+        remaining: total ? Math.max(0, total - read) : null,
+        ownsAll: !!total && !missing.length,
+        lastRead: dates.sort().pop() ?? ''
+      });
+    }
   }
   openSeries.sort((a, b) => Number(!!b.next) - Number(!!a.next) || b.read - a.read);
 
@@ -248,17 +279,45 @@ export function shelfInsights(books: Book[], readings: Reading[], now = new Date
     }
     return best > 0 ? { book: b, reason } : null;
   };
-  const rank = (list: Book[]) =>
-    list
-      .map((b) => {
-        const w = nextIds.has(b.id) ? 1000 : (b.author ? (authorW.get(b.author) ?? 0) * 2 : 0) + b.genres.reduce((a, g) => a + (genreW.get(g) ?? 0), 0);
-        // abandonados entram, mas valem metade: só passam na frente com afinidade bem maior
-        return { s: score(b), w: b.status === 'abandonado' ? w * ABANDONED_WEIGHT : w };
-      })
-      .filter((x): x is { s: Suggestion; w: number } => !!x.s)
-      .sort((a, b) => b.w - a.w)
-      .slice(0, 3)
-      .map((x) => x.s);
+  /** afinidade: autor conta em dobro + gêneros; abandonados valem metade */
+  const affinity = (b: Book) => {
+    const w = (b.author ? (authorW.get(b.author) ?? 0) * 2 : 0) + b.genres.reduce((a, g) => a + (genreW.get(g) ?? 0), 0);
+    return b.status === 'abandonado' ? w * ABANDONED_WEIGHT : w;
+  };
+  /**
+   * Régua das sugestões:
+   * 1. próximo volume de saga antes de livro solto
+   * 2. entre sagas: não começado antes de abandonado → gosto pelos volumes lidos →
+   *    afinidade do próximo volume → menos volumes faltando → tem todos os volumes →
+   *    último volume lido mais recente
+   * 3. entre livros soltos: afinidade
+   */
+  const compare = (a: { b: Book; w: number }, b: { b: Book; w: number }) => {
+    const sa = sagaRank.get(a.b.id);
+    const sb = sagaRank.get(b.b.id);
+    if (!sa || !sb) return Number(!!sb) - Number(!!sa) || b.w - a.w;
+    return (
+      Number(a.b.status === 'abandonado') - Number(b.b.status === 'abandonado') ||
+      sb.taste - sa.taste ||
+      b.w - a.w ||
+      (sa.remaining ?? Infinity) - (sb.remaining ?? Infinity) ||
+      Number(sb.ownsAll) - Number(sa.ownsAll) ||
+      sb.lastRead.localeCompare(sa.lastRead)
+    );
+  };
+  /** 3 vagas: até 2 sagas e 1 livro solto (que não pertence a saga nenhuma); sem solto suficiente, as sagas ocupam o resto (e vice-versa) */
+  const rank = (list: Book[]) => {
+    const sorted = list
+      .map((b) => ({ b, s: score(b), w: affinity(b) }))
+      .filter((x): x is { b: Book; s: Suggestion; w: number } => !!x.s)
+      .sort(compare);
+    const sagas = sorted.filter((x) => sagaRank.has(x.b.id));
+    // solto = fora de qualquer saga (volumes de saga só entram como "próximo da saga")
+    const solos = sorted.filter((x) => !seriesKey(x.b));
+    const nSolo = Math.min(solos.length, 3 - Math.min(sagas.length, 2));
+    const nSaga = Math.min(sagas.length, 3 - nSolo);
+    return [...sagas.slice(0, nSaga), ...solos.slice(0, nSolo)].map((x) => x.s);
+  };
 
   return {
     pace,
