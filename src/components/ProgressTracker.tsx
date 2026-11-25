@@ -278,8 +278,16 @@ export function ProgressTracker({
               </button>
             </div>
             <div className="field">
-              <span>Ou digite onde parou</span>
-              <DurationInput value={val} onChange={(v) => change(Math.min(total, v ?? 0))} label="Tempo ouvido" />
+              <span>Ou digite o tempo restante</span>
+              <DurationInput
+                value={total - val}
+                onChange={(v) => {
+                  // campo vazio: não mexe no progresso (vazio não quer dizer "terminei")
+                  if (v == null) return;
+                  change(total - Math.max(0, Math.min(total, v)));
+                }}
+                label="Tempo restante"
+              />
             </div>
             <button
               type="button"
